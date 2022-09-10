@@ -13,8 +13,8 @@ Please Note: There is a graphical glitch if you try to clear a Whirlpool without
 
 ## Contents
 
-1. [Adding the New CanPartyLearnMove Function we'll be using](#1-move-necessary-text-tiles-to-the-main-font-graphics)
-2. [TryCutOW](#2-update-the-character-set)
+1. [Adding the New CanPartyLearnMove Function we'll be using](#1-adding-the-new-canpartylearnmove-function-we'll-be-using)
+2. [TryCutOW](#2-trycutow)
 3. [TrySurfOW](#3-load-the-updated-font-graphics)
 4. [TryWaterfallOW](#4-delete-the-unused-font-graphics)
 5. [TryStrengthOW](#5-load-tile-graphics-into-607f-and-e0ff)
