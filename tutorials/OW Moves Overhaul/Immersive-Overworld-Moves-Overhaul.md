@@ -32,202 +32,676 @@ Please Note: There is a graphical glitch if you try to clear a Whirlpool without
 
 ## 1. Adding the New CanPartyLearnMove Function we'll be using
 
-Edit [engine\events\fruit_trees.asm](../blob/master/engine/events/fruit_trees.asm):
+Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
 
-In this example, we can find between 3 and 5 berries per tree.
-
-You can have any amount as long as you add extra code to test for each possible amount, and then the corresponding text to go with it.
 
 ```diff
-+DEF FRUIT_TREE_3_MIN EQU 3
-+DEF FRUIT_TREE_4     EQU 4
-+DEF FRUIT_TREE_5_MAX EQU 5
+CheckPartyMove:
+; Check if a monster in your party has move d.
+...
+.no
+	scf
+	ret
+
++CheckPartyCanLearnMove:
++; CHECK IF MONSTER IN PARTY CAN LEARN MOVE D
++	ld e, 0
++	xor a
++	ld [wCurPartyMon], a
++.loop
++	ld c, e
++	ld b, 0
++	ld hl, wPartySpecies
++	add hl, bc
++	ld a, [hl]
++	and a
++	jr z, .no
++	cp -1
++	jr z, .no
++	cp EGG
++	jr z, .next
++
++	ld [wCurPartySpecies], a
++	ld a, d
++	ld [wPutativeTMHMMove], a
++	push de
++	farcall CanLearnTMHMMove
++	pop de
++.check
++	ld a, c
++	and a
++	jr nz, .yes
++
++.next
++	inc e
++	jr .loop
++
++.yes
++	ld a, e
++	; which mon can learn the move
++	ld [wCurPartyMon], a
++	xor a
++	ret
++.no
++	scf
++	ret
+
+FieldMoveFailed:
 ```
 
 ## 2. TryCutOW
 
-In my example ranges provided, we can find either 3, 4, or 5 berries. So, after calling our new custom function ```GetFruitTreeCount``` we check the amount we got. In each case, we use ```giveitem ITEM_FROM_MEM, #``` to attemtp to give that amount into the bag. Using ```iffalse``` we can determine if ```giveitem``` failed, which should only ever happen if you would end up having more than 99 of the berry.
 
-
-Going all the way down to 2, 1 and then 0, we will attempt to give one less berry to see if that will fit in the bag.
-
-Keep this in mind if you make your own ranges, you need to add code to account for each amount from whatever you want ```FRUIT_TREE_#_MAX``` to be set to, all the way to 0.
-
-Edit [engine\events\fruit_trees.asm](../blob/master/engine/events/fruit_trees.asm):
+Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
 ```diff
-.fruit
--	writetext HeyItsFruitText
-+	farwritetext _HeyItsFruitText
-+	callasm GetFruitTreeCount
-+	ifequal FRUIT_TREE_3_MIN, .try_three
-+	ifequal FRUIT_TREE_4, .try_four
-+	; only possible value left it could be is FRUIT_TREE_5_MAX
-+	readmem wCurFruit
-+	giveitem ITEM_FROM_MEM, $5
-+	iffalse .try_four
-+	promptbutton
-+	writetext ObtainedFiveFruitText
-+	sjump .continue
-+.try_four
-+	readmem wCurFruit
-+	giveitem ITEM_FROM_MEM, $4
-+	iffalse .try_three
-+	promptbutton
-+	writetext ObtainedFourFruitText
-+	sjump .continue
-+.try_three
-+	readmem wCurFruit
-+	giveitem ITEM_FROM_MEM, $3
-+	iffalse .try_two
-+	promptbutton
-+	writetext ObtainedThreeFruitText
-+	sjump .continue
-+.try_two
-+; if you somehow approach the limit of number of a single berry
-+; and 3-5 will not fit in the bag but 2 will, it prints the "bag is full" text to let you know
-+; but still gives you the 2 berry too
-+; if 2 still wont fit, try 1
-+	readmem wCurFruit
-+	giveitem ITEM_FROM_MEM, $2
-+	iffalse .try_one
-+	promptbutton
-+	writetext FruitPackIsFullText
-+	promptbutton
-+	writetext ObtainedTwoFruitText
-+	sjump .continue
-+.try_one
-+; if you somehow approach the limit of number of a single berry
-+; and 3-5 will not fit in the bag but 1 will, it prints the "bag is full" text to let you know
-+; but still gives you the 1 berry too
-+; if not even one berry will fit, print "bag is full text" and do not print ObtainedFruitText 
-	readmem wCurFruit
-	giveitem ITEM_FROM_MEM
-	iffalse .packisfull
-	promptbutton
-+	writetext FruitPackIsFullText
-+	promptbutton
-	writetext ObtainedFruitText
-+.continue
-	callasm PickedFruitTree
-	specialsound
-	itemnotify
-	sjump .end
+TryCutOW::
+	ld de, ENGINE_HIVEBADGE
+	call CheckEngineFlag
+	jr c, .cant_cut
++;;;;;;;;;;;;;
++	ld a, HM_CUT
++	ld [wCurItem], a
++	ld hl, wNumItems
++	call CheckItem
++	jr z, .cant_cut
++;;;;;;;;;;;;;
++	ld d, CUT
++	call CheckPartyCanLearnMove
++	jr z, .yes
++;;;;;;;;;;;;;
+	ld d, CUT
+	call CheckPartyMove
+	jr c, .cant_cut
++.yes
+	ld a, BANK(AskCutScript)
+	ld hl, AskCutScript
+	call CallScript
+	scf
+	ret
+
+.cant_cut
+	ld a, BANK(CantCutScript)
+	ld hl, CantCutScript
+	call CallScript
+	scf
+	ret
 ```
 ## 3. TrySurfOW
 
-If we want to be able to find between 3 and 5 berries, we need ```call RandomRange``` to return a random number between 0 and 2, and then ```add 3``` (3 being our minamum amount possible to find) to this random number. 
+Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
 
-```RandomRange``` uses ```a``` to determine the range of random numbers to return, also in ```a```. The range must start with 0, so ```a``` must be set to the non-inclusive end of the range. Since the max we want is 2, we are setting ```a``` to 3. 
-
-We are also adding 3 to the result of ```call RandomRange```.
-
-This is so that if ```call RandomRange``` returns 0, we will be finding 3 berries.
-If ```call RandomRange``` returns 1, we will be finding 4 berries.
-If ```call RandomRange``` returns 2, we will be finding 5 berries.
-
-Edit [engine\events\fruit_trees.asm](../blob/master/engine/events/fruit_trees.asm):
 ```diff
-+GetFruitTreeCount:
-+; RandomRange returns a random number between 0 and 2
-+; the range is in a, not inclusive
-+; We want a possible range of 3-5 so we add 3 after
-+	ld a, 3
-+	call RandomRange
-+	add 3
-+	ld [wScriptVar], a
+TrySurfOW::
+; Checking a tile in the overworld.
+; Return carry if fail is allowed.
+
+; Don't ask to surf if already fail.
+	ld a, [wPlayerState]
+	cp PLAYER_SURF_PIKA
+	jr z, .quit
+	cp PLAYER_SURF
+	jr z, .quit
+
+; Must be facing water.
+	ld a, [wFacingTileID]
+	call GetTileCollision
+	cp WATER_TILE
+	jr nz, .quit
+
+; Check tile permissions.
+	call CheckDirection
+	jr c, .quit
+
+	ld de, ENGINE_FOGBADGE
+	call CheckEngineFlag
+	jr c, .quit
+
++;;;;
++	ld a, HM_SURF
++	ld [wCurItem], a
++	ld hl, wNumItems
++	call CheckItem
++	jr z, .quit
++;;;;
++	ld d, SURF
++	call CheckPartyCanLearnMove
++	and a
++	jr z, .yes
++;;;;
++
+	ld d, SURF
+	call CheckPartyMove
+	jr c, .quit
++.yes
+	ld hl, wBikeFlags
+	bit BIKEFLAGS_ALWAYS_ON_BIKE_F, [hl]
+	jr nz, .quit
+```
+## 4. TryWaterfallOW
+
+Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
+```diff
+TryWaterfallOW::
+	ld b,b
+	ld de, ENGINE_RISINGBADGE
+	call CheckEngineFlag
+	jr c, .failed
++;;;;;;;;;
++	ld a, HM_WATERFALL
++	ld [wCurItem], a
++	ld hl, wNumItems
++	call CheckItem
++	jr z, .failed
++;;;;;;;;;
++	ld d, WATERFALL
++	call CheckPartyCanLearnMove
++	and a
++	jr z, .yes
++;;;;;;;;;
+	ld d, WATERFALL
+	call CheckPartyMove
+	jr c, .failed
++.yes
+	call CheckMapCanWaterfall
+	jr c, .failed
+```
+
+## 5. TryStrengthOW
+
+Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
+
+```diff
+TryStrengthOW:
+	ld de, ENGINE_PLAINBADGE
+	call CheckEngineFlag
+	jr c, .nope
+
++;;;;;;;;;
++	ld a, HM_STRENGTH
++	ld [wCurItem], a
++	ld hl, wNumItems
++	call CheckItem
++	jr z, .nope
++;;;;;;;;;
++	ld d, STRENGTH
++	call CheckPartyCanLearnMove
++	and a
++	jr z, .yes
++;;;;;;;;;
+
+	ld d, STRENGTH
+	call CheckPartyMove
+	jr c, .nope
+
++.yes
+	ld hl, wBikeFlags
+	bit BIKEFLAGS_STRENGTH_ACTIVE_F, [hl]
+	jr z, .already_using
+```
+
+## 6. TryWhirlpoolOW
+
+Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
+
+```diff
+TryWhirlpoolOW::
++;;;;;;;;;;;
++	ld a, HM_WHIRLPOOL
++	ld [wCurItem], a
++	ld hl, wNumItems
++	call CheckItem
++	jr z, .failed
++;;;;;;;;;;
++	ld d, WHIRLPOOL
++	call CheckPartyCanLearnMove
++	jr z, .yes
++;;;;;;;;;;;
+	ld d, WHIRLPOOL
+	call CheckPartyMove
+	jr c, .failed
+
++.yes
+	ld de, ENGINE_GLACIERBADGE
+	call CheckBadge
+	jr c, .failed
+
+	call TryWhirlpoolMenu
+	jr c, .failed
+
+	ld a, BANK(Script_AskWhirlpoolOW)
+	ld hl, Script_AskWhirlpoolOW
+	call CallScript
+	scf
+	ret
+
+.failed
+	ld a, BANK(Script_MightyWhirlpool)
+	ld hl, Script_MightyWhirlpool
+	call CallScript
+	scf
+	ret
+```
+
+## 7. TryHeadbuttOW
+
+Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
+
+
+```diff
+TryHeadbuttOW::
++	ld a, TM_HEADBUTT
++	ld [wCurItem], a
++	ld hl, wNumItems
++	call CheckItem
++	jr z, .no
++
++	ld d, HEADBUTT
++	call CheckPartyCanLearnMove
++	jr z, .can_use ; cannot learn headbutt
++
+	ld d, HEADBUTT
+	call CheckPartyMove
+	jr c, .no
++.can_use
+	ld a, BANK(AskHeadbuttScript)
+	ld hl, AskHeadbuttScript
+	call CallScript
+	scf
+	ret
+
+.no
+	xor a
+	ret
+```
+
+## 8. HasRockSmash
+
+Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
+
+
+```diff
+HasRockSmash:
+	ld d, ROCK_SMASH
+	call CheckPartyMove
++	jr nc, .yes
+-	jr nc, .yes
++;;;;;;;;;;;;;
++	ld a, TM_ROCK_SMASH
++	ld [wCurItem], a
++	ld hl, wNumItems
++	call CheckItem
++	jr z, .no
++;;;;;;;;;;;;;
++	ld d, ROCK_SMASH
++	call CheckPartyCanLearnMove
++	jr z, .yes
++
++.no
+	ld a, 1
+	jr .done
++.yes
+	xor a
+	jr .done
++.done
+	ld [wScriptVar], a
+	ret
+```
+
+## 9. Editing the Pokemon Submenu
+
+Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
+
+
+```diff
+GetMonSubmenuItems:
+	call ResetMonSubmenu
+	ld a, [wCurPartySpecies]
+	cp EGG
+	jr z, .egg
+	ld a, [wLinkMode]
+	and a
+	jr nz, .skip_moves
+-
++	call CanUseFlash
++	call CanUseFly
++	call CanUseDig
++	call Can_Use_Sweet_Scent
++	call CanUseTeleport
++	call CanUseSoftboiled
++	call CanUseMilkdrink
+-
+.skip_moves
+	ld a, MONMENUITEM_STATS
+	call AddMonMenuItem
+	ld a, MONMENUITEM_SWITCH
+	call AddMonMenuItem
+	ld a, MONMENUITEM_MOVE
+	call AddMonMenuItem
+```
+
+## 10. New Submenu Functions
+
+Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
+
+
+```diff
++CheckMonCanLearn_TM_HM:
++; Check if wCurPartySpecies can learn move in 'a'
++	ld [wPutativeTMHMMove], a
++	ld a, [wCurPartySpecies]
++	farcall CanLearnTMHMMove
++.check
++	ld a, c
++	and a
++	ret z
++; yes
++	scf
 +	ret
 +
-GetCurTreeFruit:
++CheckMonKnowsMove:
++	ld b, a
++	ld a, MON_MOVES
++	call GetPartyParamLocation
++	ld d, h
++	ld e, l
++	ld c, NUM_MOVES
++.loop
++	ld a, [de]
++	and a
++	jr z, .next
++	cp b
++	jr z, .found ; knows move
++.next
++	inc de
++	dec c
++	jr nz, .loop
++	ld a, -1
++	scf ; mon doesnt know move
++	ret
++.found
++	xor a
++	ret z
++
++CheckLvlUpMoves:
++; move looking for in a
++	ld d, a
++	ld a, [wCurPartySpecies]
++	dec a
++	ld b, 0
++	ld c, a
++	ld hl, EvosAttacksPointers
++	add hl, bc
++	add hl, bc
++	ld a, BANK(EvosAttacksPointers)
++	ld b, a
++	call GetFarWord
++	ld a, b
++	call GetFarByte
++	inc hl
++	cp 0
++	jr z, .find_move
++	dec hl
++	call MonSubMenu_SkipEvolutions
++.find_move
++	call MonSubMenu_GetNextEvoAttackByte
++	and a
++	jr z, .notfound ; end of mon's lvl up learnset
++	call MonSubMenu_GetNextEvoAttackByte
++	cp d ;MAKE SURE NOT CLOBBERED
++	jr z, .found
++	jr .find_move
++.found
++	xor a
++	ret z ; move is in lvl up learnset
++.notfound
++	scf ; move isnt in lvl up learnset
++	ret
++
++MonSubMenu_SkipEvolutions:
++; Receives a pointer to the evos and attacks for a mon in b:hl, and skips to the attacks.
++	ld a, b
++	call GetFarByte
++	inc hl
++	and a
++	ret z
++	cp EVOLVE_STAT
++	jr nz, .no_extra_skip
++	inc hl
++.no_extra_skip
++	inc hl
++	inc hl
++	jr MonSubMenu_SkipEvolutions
++
++MonSubMenu_GetNextEvoAttackByte:
++	ld a, BANK(EvosAttacksPointers)
++	call GetFarByte
++	inc hl
++	ret
 ```
-## 4. TryWaterfallOW
 
-First, go to towards the end of fruit_trees.asm and add the local references to our new text.
-
-Edit [engine\events\fruit_trees.asm](../blob/master/engine/events/fruit_trees.asm):
-```diff
-	text_far _ObtainedFruitText
-	text_end
-+
-+ObtainedTwoFruitText:
-+	text_far _ObtainedTwoFruitText
-+	text_end
-+
-+ObtainedThreeFruitText:
-+	text_far _ObtainedThreeFruitText
-+	text_end
-+
-+ObtainedFourFruitText:
-+	text_far _ObtainedFourFruitText
-+	text_end
-+
-+ObtainedFiveFruitText:
-+	text_far _ObtainedFiveFruitText
-+	text_end
-+
-FruitPackIsFullText:
-```
-
-And then, to add the actual text, edit [data\text\common_1.asm](../blob/master/data/text/common_1.asm):
-
-```diff
-_HeyItsFruitText::
--	text "Hey! It's"
-+	text "Hey! Found"
-	line "@"
-	text_ram wStringBuffer3
--	text "!"
-+	text "S!"
-	done
-
-_ObtainedFruitText::
-	text "Obtained"
-	line "@"
-	text_ram wStringBuffer3
-	text "!"
-	done
-+_ObtainedTwoFruitText::
-+	text "Obtained two"
-+	line "@"
-+	text_ram wStringBuffer3
-+	text "S!"
-+	done
-+_ObtainedThreeFruitText::
-+	text "Obtained three"
-+	line "@"
-+	text_ram wStringBuffer3
-+	text "S!"
-+	done
-+
-+_ObtainedFourFruitText::
-+	text "Obtained four"
-+	line "@"
-+	text_ram wStringBuffer3
-+	text "S!"
-+	done
-+
-+_ObtainedFiveFruitText::
-+	text "Obtained five"
-+	line "@"
-+	text_ram wStringBuffer3
-+	text "S!"
-+	done
-+
-_FruitPackIsFullText::
-```
-
-## 4. TryWaterfallOW
-## 5. TryStrengthOW
-## 6. TryWhirlpoolOW
-## 7. TryHeadbuttOW
-## 8. HasRockSmash
-## 9. Editing the Pokemon Submenu
-## 10. New Submenu Functions
 ## 11. Flash
+
+Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
+
+
+```diff
++CanUseFlash:
++	ld de, ENGINE_ZEPHYRBADGE
++	ld b, CHECK_FLAG
++	farcall EngineFlagAction
++	ld a, c
++	and a
++	ret z ; .fail, dont have needed badge
++; Flash
++	farcall SpecialAerodactylChamber
++	jr c, .valid_location ; can use flash
++	ld a, [wTimeOfDayPalset]
++	cp DARKNESS_PALSET
++	ret nz ; .fail ; not a darkcave
++
++.valid_location
++	ld a, FLASH
++	call CheckMonKnowsMove
++	and a
++	jr z, .yes
++
++	ld a, HM_FLASH
++	ld [wCurItem], a
++	ld hl, wNumItems
++	call CheckItem
++	ret nc ; hm isnt in bag
++
++	ld a, FLASH
++	call CheckMonCanLearn_TM_HM
++	jr c, .yes
++
++	ld a, FLASH
++	call CheckLvlUpMoves
++	ret c ; fail
++
++.yes
++	ld a, MONMENUITEM_FLASH
++	call AddMonMenuItem
++	ret
+```
+
 ## 12. Fly
+
+Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
+
+
+```diff
++CanUseFly:
++	ld de, ENGINE_STORMBADGE
++	ld b, CHECK_FLAG
++	farcall EngineFlagAction
++	ld a, c
++	and a
++	ret z ; .fail, dont have needed badge
++
++	call GetMapEnvironment
++	call CheckOutdoorMap
++	ret nz ; not outdoors, cant fly
++
++	ld a, FLY
++	call CheckMonKnowsMove
++	and a
++	jr z, .yes
++
++	ld a, HM_FLY
++	ld [wCurItem], a
++	ld hl, wNumItems
++	call CheckItem
++	ret nc ; .fail, hm isnt in bag
++
++	ld a, FLY
++	call CheckMonCanLearn_TM_HM
++	jr c, .yes
++
++	ld a, FLY
++	call CheckLvlUpMoves
++	ret c ; fail
++.yes
++	ld a, MONMENUITEM_FLY
++	call AddMonMenuItem
++	ret
+```
+
 ## 13. Sweet Scent
+
+Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
+
+
+```diff
++Can_Use_Sweet_Scent:
++	farcall CanUseSweetScent
++	ret nc ; .no_battle
++	farcall GetMapEncounterRate
++	ld a, b
++	and a
++	ret z ; .no_battle
++
++.valid_location
++	ld a, SWEET_SCENT
++	call CheckMonKnowsMove
++	and a
++	jr z, .yes
++
++	ld a, TM_SWEET_SCENT
++	ld [wCurItem], a
++	ld hl, wNumItems
++	call CheckItem
++	ret nc ; .fail, tm not in bag
++
++	ld a, SWEET_SCENT
++	call CheckMonCanLearn_TM_HM
++	jr c, .yes
++
++	ld a, SWEET_SCENT
++	call CheckLvlUpMoves
++	ret c ; fail
++.yes
++	ld a, MONMENUITEM_SWEETSCENT
++	call AddMonMenuItem
++	ret
+```
+
 ## 14. Dig
+
+Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
+
+
+```diff
++CanUseDig:
++	call GetMapEnvironment
++	cp CAVE
++	jr z, .valid_location
++	cp DUNGEON
++	ret nz ; fail, not inside cave or dungeon
++
++.valid_location
++	ld a, DIG
++	call CheckMonKnowsMove
++	and a
++	jr z, .yes
++
++	ld a, TM_DIG
++	ld [wCurItem], a
++	ld hl, wNumItems
++	call CheckItem
++	ret nc ; .fail ; TM not in bag
++
++	ld a, DIG
++	call CheckMonCanLearn_TM_HM
++	jr c, .yes
++
++	ld a, DIG
++	call CheckLvlUpMoves
++	ret c ; fail
++.yes
++	ld a, MONMENUITEM_DIG
++	call AddMonMenuItem
++	ret
+```
+
 ## 15. Teleport
+
+Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
+
+
+```diff
++CanUseTeleport:
++	call GetMapEnvironment
++	call CheckOutdoorMap
++	ret nz ; .fail
++	
++	ld a, TELEPORT
++	call CheckMonKnowsMove
++	and a
++	jr z, .yes
++
++	ld a, TELEPORT
++	call CheckLvlUpMoves
++	ret c ; fail
++.yes
++	ld a, MONMENUITEM_TELEPORT
++	call AddMonMenuItem	
++	ret
+```
+
 ## 16. Softboiled and Milk Drink
-Let me know if you have any questions, you can find me in the discord server.
+
+Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
+
+
+```diff
++CanUseSoftboiled:
++	ld a, SOFTBOILED
++	call CheckMonKnowsMove
++	and a
++	ret nz
++	ld a, MONMENUITEM_SOFTBOILED
++	call AddMonMenuItem
++	ret
+```
+
+
+```diff
++CanUseMilkdrink:
++	ld a, MILK_DRINK
++	call CheckMonKnowsMove
++	and a
++	ret nz
++
++	ld a, MONMENUITEM_MILKDRINK
++	call AddMonMenuItem
++	ret
+```
+
+## 17. Polished Crystal by Rangi / TM Flag Array Compatibility
+
+## 18. New Pokecrystal16 by Vulcandth Compatibility
+
+Let me know if you have any questions, you can find me in the Pret discord server.
 
 
