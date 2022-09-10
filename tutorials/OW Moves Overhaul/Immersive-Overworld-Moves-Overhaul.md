@@ -13,22 +13,22 @@ Please Note: There is a graphical glitch if you try to clear a Whirlpool without
 
 ## Contents
 
-1. [Adding the New CanPartyLearnMove Function we'll be using](#1-adding-the-new-canpartylearnmove-function-we'll-be-using)
+1. [Adding the New CanPartyLearnMove Function we'll be using](#1-adding-the-new-canpartylearnmove-function-well-be-using)
 2. [TryCutOW](#2-trycutow)
-3. [TrySurfOW](#3-load-the-updated-font-graphics)
-4. [TryWaterfallOW](#4-delete-the-unused-font-graphics)
-5. [TryStrengthOW](#5-load-tile-graphics-into-607f-and-e0ff)
-6. [TryWhirlpoolOW](#6-update-the-tilesets-graphics-to-not-skip-607f)
-7. [TryHeadbuttOW](#7-update-the-tilesets-palette-maps-to-not-skip-607f)
-8. [HasRockSmash](#8-dont-hide-sprites-behind-607e-or-e0fe)
-9. [Editing the Pokemon Submenu](#9-change-some-hard-coded-tile-placements)
-10. [New Submenu Functions](#10-correct-other-implicit-assumptions-about-tiles)
-11. [Flash](#10-correct-other-implicit-assumptions-about-tiles)
-12. [Fly](#10-correct-other-implicit-assumptions-about-tiles)
-13. [Sweet Scent](#10-correct-other-implicit-assumptions-about-tiles)
-14. [Dig](#10-correct-other-implicit-assumptions-about-tiles)
-15. [Teleport](#10-correct-other-implicit-assumptions-about-tiles)
-16. [Softboiled and Milk Drink](#10-correct-other-implicit-assumptions-about-tiles)
+3. [TrySurfOW](#3-trysurfow)
+4. [TryWaterfallOW](#4-trywaterfallow)
+5. [TryStrengthOW](#5-trystrengthow)
+6. [TryWhirlpoolOW](#6-trywhirlpoolow)
+7. [TryHeadbuttOW](#7-tryheadbuttow)
+8. [HasRockSmash](#8-hasrocksmash)
+9. [Editing the Pokemon Submenu](#9-editing-the-pokemon-submenu)
+10. [New Submenu Functions](#10-new-submenu-functions)
+11. [Flash](#11-flash)
+12. [Fly](#12-fly)
+13. [Sweet Scent](#13-sweet-scent)
+14. [Dig](#14-dig)
+15. [Teleport](#15-teleport)
+16. [Softboiled and Milk Drink](#16-softboiled-and-milk-drink)
 
 ## 1. Adding the New CanPartyLearnMove Function we'll be using
 
