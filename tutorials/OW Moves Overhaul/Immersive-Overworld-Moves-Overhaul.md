@@ -23,14 +23,14 @@ Please Note: There is a graphical glitch if you try to clear a Whirlpool without
 8. [HasRockSmash](#8-dont-hide-sprites-behind-607e-or-e0fe)
 9. [Editing the Pokemon Submenu](#9-change-some-hard-coded-tile-placements)
 10. [New Submenu Functions](#10-correct-other-implicit-assumptions-about-tiles)
-10. [Flash](#10-correct-other-implicit-assumptions-about-tiles)
-10. [Fly](#10-correct-other-implicit-assumptions-about-tiles)
-10. [Sweet Scent](#10-correct-other-implicit-assumptions-about-tiles)
-10. [Dig](#10-correct-other-implicit-assumptions-about-tiles)
-10. [Teleport](#10-correct-other-implicit-assumptions-about-tiles)
-10. [Softboiled and Milk Drink](#10-correct-other-implicit-assumptions-about-tiles)
+11. [Flash](#10-correct-other-implicit-assumptions-about-tiles)
+12. [Fly](#10-correct-other-implicit-assumptions-about-tiles)
+13. [Sweet Scent](#10-correct-other-implicit-assumptions-about-tiles)
+14. [Dig](#10-correct-other-implicit-assumptions-about-tiles)
+15. [Teleport](#10-correct-other-implicit-assumptions-about-tiles)
+16. [Softboiled and Milk Drink](#10-correct-other-implicit-assumptions-about-tiles)
 
-## 1. Add local constants to define the amount of Fruit we can find
+## 1. Adding the New CanPartyLearnMove Function we'll be using
 
 Edit [engine\events\fruit_trees.asm](../blob/master/engine/events/fruit_trees.asm):
 
@@ -44,7 +44,7 @@ You can have any amount as long as you add extra code to test for each possible 
 +DEF FRUIT_TREE_5_MAX EQU 5
 ```
 
-## 2. Add the Random Amount of Found Berries to the Bag, and Print the Amount
+## 2. TryCutOW
 
 In my example ranges provided, we can find either 3, 4, or 5 berries. So, after calling our new custom function ```GetFruitTreeCount``` we check the amount we got. In each case, we use ```giveitem ITEM_FROM_MEM, #``` to attemtp to give that amount into the bag. Using ```iffalse``` we can determine if ```giveitem``` failed, which should only ever happen if you would end up having more than 99 of the berry.
 
@@ -113,7 +113,7 @@ Edit [engine\events\fruit_trees.asm](../blob/master/engine/events/fruit_trees.as
 	itemnotify
 	sjump .end
 ```
-## 3. Add Function to Determine Amount of Fruit that will be found
+## 3. TrySurfOW
 
 If we want to be able to find between 3 and 5 berries, we need ```call RandomRange``` to return a random number between 0 and 2, and then ```add 3``` (3 being our minamum amount possible to find) to this random number. 
 
@@ -139,7 +139,7 @@ Edit [engine\events\fruit_trees.asm](../blob/master/engine/events/fruit_trees.as
 +
 GetCurTreeFruit:
 ```
-## 4. Add New Text For Each Amount of Fruit Possible
+## 4. TryWaterfallOW
 
 First, go to towards the end of fruit_trees.asm and add the local references to our new text.
 
@@ -215,7 +215,19 @@ _ObtainedFruitText::
 _FruitPackIsFullText::
 ```
 
-That's it!
+## 4. TryWaterfallOW
+## 5. TryStrengthOW
+## 6. TryWhirlpoolOW
+## 7. TryHeadbuttOW
+## 8. HasRockSmash
+## 9. Editing the Pokemon Submenu
+## 10. New Submenu Functions
+## 11. Flash
+## 12. Fly
+## 13. Sweet Scent
+## 14. Dig
+## 15. Teleport
+## 16. Softboiled and Milk Drink
 Let me know if you have any questions, you can find me in the discord server.
 
 
