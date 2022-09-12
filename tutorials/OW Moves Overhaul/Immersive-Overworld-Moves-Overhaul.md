@@ -42,6 +42,10 @@ We get the species and skip the mon if the species is 0 (empty party slot/end of
 
 If the mon we're currently checking can learn the Move in ```d```, we return with the index of the party mon in ```wCurPartyMon```, zero out register ```a``` and don't bother checking the rest of the party.
 
+If the TM/HM/Move tutor check fails, we then check the Mon's Level-up Moveset. This code is actually adapted from ax6 and Vulcandth's Pokecrystal16, and we also use the same code in the mon submenu!
+
+All we do is check to see if the pokemon is capabale of evolving, and if so, skip over the evolution data so we start at the Level up moves. If we find the move, we exit early. If we read a 0 for the Lvl-learned part of the entry, we know we've reached the end of the learnset, and exit because we obviously didn't find the move we're looking for.
+
 If we fail to find a mon in the party that can learn the Move, the Carry Flag is set via ```scf``` before we return.
 
 ```diff
@@ -72,6 +76,7 @@ CheckPartyMove:
 +
 +	ld [wCurPartySpecies], a
 +	ld a, d
++; Check the TM/HM/Move Tutor list
 +	ld [wPutativeTMHMMove], a
 +	push de
 +	farcall CanLearnTMHMMove
@@ -80,6 +85,14 @@ CheckPartyMove:
 +	ld a, c
 +	and a
 +	jr nz, .yes
++; Check the Pokemon's Level-Up Learnset
++	ld b,b
++	ld a, d
++	push de
++	call OW_CheckLvlUpMoves
++	pop de
++	jr nc, .yes
++; done checking
 +
 +.next
 +	inc e
@@ -94,7 +107,63 @@ CheckPartyMove:
 +.no
 +	scf
 +	ret
-
++
++OW_CheckLvlUpMoves:
++; move looking for in a
++	ld d, a
++	ld a, [wCurPartySpecies]
++	dec a
++	ld b, 0
++	ld c, a
++	ld hl, EvosAttacksPointers
++	add hl, bc
++	add hl, bc
++	ld a, BANK(EvosAttacksPointers)
++	ld b, a
++	call GetFarWord
++	ld a, b
++	call GetFarByte
++	inc hl
++	cp 0
++	jr z, .find_move ; no evolutions
++	dec hl ; does have evolution(s)
++	call OW_SkipEvolutions
++.find_move
++	call OW_GetNextEvoAttackByte
++	and a
++	jr z, .notfound ; end of mon's lvl up learnset
++	call OW_GetNextEvoAttackByte
++	cp d
++	jr z, .found
++	jr .find_move
++.found
++	xor a
++	ret ; move is in lvl up learnset
++.notfound
++	scf ; move isnt in lvl up learnset
++	ret
++
++OW_SkipEvolutions:
++; Receives a pointer to the evos and attacks, and skips to the attacks.
++	ld a, b
++	call GetFarByte
++	inc hl
++	and a
++	ret z
++	cp EVOLVE_STAT
++	jr nz, .no_extra_skip
++	inc hl
++.no_extra_skip
++	inc hl
++	inc hl
++	jr OW_SkipEvolutions
++
++OW_GetNextEvoAttackByte:
++	ld a, BANK(EvosAttacksPointers)
++	call GetFarByte
++	inc hl
++	ret
++
 FieldMoveFailed:
 ```
 
