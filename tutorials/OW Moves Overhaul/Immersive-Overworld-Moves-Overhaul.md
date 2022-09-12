@@ -1,5 +1,5 @@
 
-Finally got around to writing this after getting the idea two years ago lol. 
+Finally got around to writing this after getting the idea two years ago lol, nearly dying from an extremely rare autoimmune disease has a way of messing with your hobbies. So this code is relatively old, and though I've tested it recently, there may be problems I've missed. Feel free to DM me in the Pret Discord or just post the issues to the Main Pokecrystal channel! 
 
 This code should be compatible with most other features. Edits will be needed to work with Pokecrystal16. Will add those to this tutorial when I can.
 
@@ -29,11 +29,20 @@ Please Note: There is a graphical glitch if you try to clear a Whirlpool without
 14. [Dig](#14-dig)
 15. [Teleport](#15-teleport)
 16. [Softboiled and Milk Drink](#16-softboiled-and-milk-drink)
+17. [OPTIONAL TM Flag Array or Polished Crystal Compatibility](#17-optional-tm-flag-array-or-polished-crystal-compatibility)
+18. [OPTIONAL New Pokecrystal16 Compatibility](#18-optional-new-pokecrystal16-compatibility)
 
 ## 1. Adding the New CanPartyLearnMove Function we'll be using
 
 Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
 
+Starting off, this function mirrors a lot of other functions in the codebase that cycle through each Pokemon in the party. 
+NOTE: It's important to remeber that the Move in question must be loaded into register ```d``` before calling this function!!!!
+We get the species and skip the mon if the species is 0 (empty party slot/end of party) or if it's an egg. Once we have the species in ```wCurPartySpecies``` via ```ld [wCurPartySpecies], a```  we ```farcall CanLearnTMHMMove``` which is the function that's used when you try to teach a Pokemon a TM or HM, so it's perfect for our uses here. The result is given in register ```c``` which we check. 
+
+If the mon we're currently checking can learn the Move in ```d```, we return with the index of the party mon in ```wCurPartyMon```, zero out register ```a``` and don't bother checking the rest of the party.
+
+If we fail to find a mon in the party that can learn the Move, the Carry Flag is set via ```scf``` before we return.
 
 ```diff
 CheckPartyMove:
@@ -91,27 +100,52 @@ FieldMoveFailed:
 
 ## 2. TryCutOW
 
-
 Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
+
+Most of the functions we're editing in ```/engine/events/overworld.asm``` will mirror each other. 
+
+Not much is needed to implement our new ```CheckPartyCanLearnMove``` function. 
+
+First, we need to move the ```CheckPartyMove``` function to the end of the sequence, since it simply checks in any mons in the Party have the Move loaded into ```d``` as one of their 4 learned moves. Instead of checking this first thing, we move it to after ```CheckPartyCanLearnMove```. So now the function flows like this whenever the player interacts with a Cut Tree:
+
+Step 1) Check if we have Hivebadge. If not, don't bother checking anything else, just exit with failure.
+
+Step 2) Check if we have the CUT HM in the bag. If not, don't bother checking anything else, just exit with failure.
+
+Step 3) Check if a Pokemon in the Party can learn CUT. If yes, we are done and jump to ```.yes``` and the Cut Tree will be cut. If not, we fallthrough to Step 4.
+
+Step 4) Check if a Pokemon in the Party knows CUT. If not, we fail, and the Cut Tree cannot be Cut. If yes, we fallthrough to ```.yes``` and the Cut Tree will be cut.
+
 ```diff
 TryCutOW::
+-	ld d, CUT
+-	call CheckPartyMove
+-	jr c, .cant_cut
+-
++ ; Step 1
 	ld de, ENGINE_HIVEBADGE
 	call CheckEngineFlag
 	jr c, .cant_cut
-+;;;;;;;;;;;;;
++ ; end of Step 1
++
++ ; Step 2
 +	ld a, HM_CUT
 +	ld [wCurItem], a
 +	ld hl, wNumItems
 +	call CheckItem
 +	jr z, .cant_cut
-+;;;;;;;;;;;;;
++ ; end of Step 2
++
++ ; Step 3
 +	ld d, CUT
 +	call CheckPartyCanLearnMove
 +	jr z, .yes
-+;;;;;;;;;;;;;
-	ld d, CUT
-	call CheckPartyMove
-	jr c, .cant_cut
++ end of Step 3
++
+
++	ld d, CUT
++	call CheckPartyMove
++	jr c, .cant_cut
 +.yes
 	ld a, BANK(AskCutScript)
 	ld hl, AskCutScript
@@ -126,9 +160,41 @@ TryCutOW::
 	scf
 	ret
 ```
+
+Technically, you COULD assume that no Pokemon could have an Overworld move in their moveset without being able to learn it, so Step 4 could be safely deleted if you're sure that it could never happen. I am leaving it in the interest of compatibility and testing reasons. But if you are confident you don't need this check, you could modify this and the rest of the functions to look like: 
+
+```diff
+TryCutOW::
+...
+; Step 3
+	ld d, CUT
+	call CheckPartyCanLearnMove
+-	jr z, .yes
+-
+- ; Step 4
+-	ld d, CUT
+-	call CheckPartyMove
+	jr c, .cant_cut
++ ; end of Step 3
+- ; end of Step 4
+-.yes
+	ld a, BANK(AskCutScript)
+	ld hl, AskCutScript
+	call CallScript
+	scf
+	ret
+```
+
+We don't need the ```.yes``` label anymore so we also get rid of it.
+
+Similarly, if you don't want to make the use of HM Overworld moves dependant on having a Badge or having the HM/TM in the bag, just delete those steps entirely. 
+
 ## 3. TrySurfOW
 
 Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
+
+Nothing too different from ```TryCutOW```, Surf just has additional checks at the beginning that we don't need to mess with. After those, we still apply the same 4-Step checks.
+
 
 ```diff
 TrySurfOW::
@@ -152,23 +218,25 @@ TrySurfOW::
 	call CheckDirection
 	jr c, .quit
 
++ ; Step 1
 	ld de, ENGINE_FOGBADGE
 	call CheckEngineFlag
 	jr c, .quit
 
-+;;;;
++ ; Step 2
 +	ld a, HM_SURF
 +	ld [wCurItem], a
 +	ld hl, wNumItems
 +	call CheckItem
 +	jr z, .quit
-+;;;;
++
++ ; Step 3
 +	ld d, SURF
 +	call CheckPartyCanLearnMove
 +	and a
 +	jr z, .yes
-+;;;;
 +
++ ; Step 4
 	ld d, SURF
 	call CheckPartyMove
 	jr c, .quit
@@ -180,27 +248,36 @@ TrySurfOW::
 ## 4. TryWaterfallOW
 
 Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
+
+Nothing special to note here. Same 4-Steps, moving the ```CheckPartyMove``` code to be the last check instead of the first.
+
 ```diff
 TryWaterfallOW::
-	ld b,b
+-	ld d, WATERFALL
+-	call CheckPartyMove
+-	jr c, .failed
++ ; Step 1
 	ld de, ENGINE_RISINGBADGE
 	call CheckEngineFlag
 	jr c, .failed
-+;;;;;;;;;
++
++ ; Step 2
 +	ld a, HM_WATERFALL
 +	ld [wCurItem], a
 +	ld hl, wNumItems
 +	call CheckItem
 +	jr z, .failed
-+;;;;;;;;;
++
++ ; Step 3
 +	ld d, WATERFALL
 +	call CheckPartyCanLearnMove
 +	and a
 +	jr z, .yes
-+;;;;;;;;;
-	ld d, WATERFALL
-	call CheckPartyMove
-	jr c, .failed
++
++ ; Step 4
++	ld d, WATERFALL
++	call CheckPartyMove
++	jr c, .failed
 +.yes
 	call CheckMapCanWaterfall
 	jr c, .failed
@@ -210,29 +287,36 @@ TryWaterfallOW::
 
 Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
 
+Same thing for Strength, we move ```CheckPartyMove``` code to be Step 4 instead of the first thing checked.
+
 ```diff
 TryStrengthOW:
+-	ld d, STRENGTH
+-	call CheckPartyMove
+-	jr c, .nope
++; Step 1	
 	ld de, ENGINE_PLAINBADGE
 	call CheckEngineFlag
 	jr c, .nope
 
-+;;;;;;;;;
++; Step 2
 +	ld a, HM_STRENGTH
 +	ld [wCurItem], a
 +	ld hl, wNumItems
 +	call CheckItem
 +	jr z, .nope
-+;;;;;;;;;
++
++; Step 3
 +	ld d, STRENGTH
 +	call CheckPartyCanLearnMove
 +	and a
 +	jr z, .yes
-+;;;;;;;;;
-
-	ld d, STRENGTH
-	call CheckPartyMove
-	jr c, .nope
-
++
++; Step 4
++	ld d, STRENGTH
++	call CheckPartyMove
++	jr c, .nope
++
 +.yes
 	ld hl, wBikeFlags
 	bit BIKEFLAGS_STRENGTH_ACTIVE_F, [hl]
@@ -243,28 +327,36 @@ TryStrengthOW:
 
 Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
 
+Whirlpool has more complicated functions surrounding ```TryWhirlpoolOW``` but according to my testing, they don't actually do much if anything. However, there is a problem SOMEWHERE, considering there's a small graphical bug with my code here. If you examine a Whirlpool without having the badge or the TM (either or both) the text box goes yellow then blue the next time you examine it. As far as I can tell, it doesn't do anything else besides this color thing. But if anyone finds the source of this bug, a solution or work around, please let me know or directly edit this tutorial if you're sure!
+
 ```diff
 TryWhirlpoolOW::
-+;;;;;;;;;;;
+-	ld d, WHIRLPOOL
+-	call CheckPartyMove
+-	jr c, .failed
++; Step 1
+	ld de, ENGINE_GLACIERBADGE
+	call CheckEngineFlag
+	jr c, .failed
++
++; Step 2
 +	ld a, HM_WHIRLPOOL
 +	ld [wCurItem], a
 +	ld hl, wNumItems
 +	call CheckItem
 +	jr z, .failed
-+;;;;;;;;;;
++
++; Step 3
 +	ld d, WHIRLPOOL
 +	call CheckPartyCanLearnMove
 +	jr z, .yes
-+;;;;;;;;;;;
-	ld d, WHIRLPOOL
-	call CheckPartyMove
-	jr c, .failed
-
++
++; Step 4
++	ld d, WHIRLPOOL
++	call CheckPartyMove
++	jr c, .failed
++
 +.yes
-	ld de, ENGINE_GLACIERBADGE
-	call CheckBadge
-	jr c, .failed
-
 	call TryWhirlpoolMenu
 	jr c, .failed
 
@@ -286,19 +378,23 @@ TryWhirlpoolOW::
 
 Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
 
+Now we're done with the HMs and onto the TM Overworld moves! Nothing too different, except no more badge checks (unless you want to add a badge check, feel free!) 
 
 ```diff
 TryHeadbuttOW::
++; Step 1
 +	ld a, TM_HEADBUTT
 +	ld [wCurItem], a
 +	ld hl, wNumItems
 +	call CheckItem
 +	jr z, .no
 +
++; Step 2
 +	ld d, HEADBUTT
 +	call CheckPartyCanLearnMove
 +	jr z, .can_use ; cannot learn headbutt
 +
++; Step 3
 	ld d, HEADBUTT
 	call CheckPartyMove
 	jr c, .no
@@ -318,31 +414,37 @@ TryHeadbuttOW::
 
 Edit [engine\events\overworld.asm](../blob/master/engine/events/overworld.asm):
 
+Pretty Self explanitory at this point, you're an expert!
 
 ```diff
 HasRockSmash:
-	ld d, ROCK_SMASH
-	call CheckPartyMove
-+	jr nc, .yes
+-	ld d, ROCK_SMASH
+-	call CheckPartyMove
 -	jr nc, .yes
-+;;;;;;;;;;;;;
+-; no
++; Step 1
 +	ld a, TM_ROCK_SMASH
 +	ld [wCurItem], a
 +	ld hl, wNumItems
 +	call CheckItem
 +	jr z, .no
-+;;;;;;;;;;;;;
++
++; Step 2
 +	ld d, ROCK_SMASH
 +	call CheckPartyCanLearnMove
 +	jr z, .yes
 +
++ Step 3
++	ld d, ROCK_SMASH
++	call CheckPartyMove
++	jr nc, .yes
 +.no
 	ld a, 1
 	jr .done
-+.yes
+.yes
 	xor a
 	jr .done
-+.done
+.done
 	ld [wScriptVar], a
 	ret
 ```
@@ -351,6 +453,7 @@ HasRockSmash:
 
 Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
 
+Don't be intimiated lol
 
 ```diff
 GetMonSubmenuItems:
@@ -698,9 +801,9 @@ Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.
 +	ret
 ```
 
-## 17. Polished Crystal by Rangi / TM Flag Array Compatibility
+## 17. OPTIONAL TM Flag Array or Polished Crystal Compatibility
 
-## 18. New Pokecrystal16 by Vulcandth Compatibility
+## 18. OPTIONAL New Pokecrystal16 Compatibility
 
 Let me know if you have any questions, you can find me in the Pret discord server.
 
