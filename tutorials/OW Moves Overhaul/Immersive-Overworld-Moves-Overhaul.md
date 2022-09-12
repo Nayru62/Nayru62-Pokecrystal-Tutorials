@@ -964,6 +964,10 @@ These two are special. We only check if the pokemon knows the move, they don't r
 +	ret
 ```
 
+That's it for most people. IF you want to adapt this for Polished Crystal or Pokecrystal16, keep reading. If not, good luck! This is a long but hopefully straightforward tutorial that should make you comfortable editing to suit your preferences and needs for your rom hack.
+
+If you have problems, please be VERY SPECIFIC with what code base you're using, what your goal is, and what changes you've made so far! It will be much easier to help you that way. Please reach out to me (Nayru62) on the pret Discord in the pokecrystal channel.
+
 ## 17. OPTIONAL TM Flag Array or Polished Crystal Compatibility
 
 Changes for [Polished Crystal](https://github.com/Rangi42/polishedcrystal) by Rangi:
