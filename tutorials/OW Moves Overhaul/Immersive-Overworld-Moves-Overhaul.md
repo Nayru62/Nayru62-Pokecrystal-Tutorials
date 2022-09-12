@@ -9,8 +9,6 @@
 
 Finally got around to writing this after getting the idea two years ago lol, nearly dying from an extremely rare autoimmune disease has a way of messing with your hobbies. So this code is relatively old, and though I've tested it recently, there may be problems I've missed. Feel free to DM me in the Pret Discord or just post the issues to the Main Pokecrystal channel! 
 
-This code should be compatible with most other features. Edits will be needed to work with Pokecrystal16. Will add those to this tutorial when I can.
-
 This tutorial will allow use of HMs and other Overworld Moves (Rock Smash, Headbutt, Sweet Scent, Dig, Teleport) without pokemon in the party needing to have learned the move, as long as they are capable of learning the move. By default, I also have code that checks for Badges required, and the prescense of the HM/TM of the corresponding move in the bag. These code checks are optional, so if you want an open world you can have it. 
 
 For the TM overworld moves, my assumption is that you've already implemented [Infinitely reusable TMs](Infinitely-reusable-TMs) so that once you aquire the TMs, they are permanent in the bag. If you do not wish to have [Infinitely reusable TMs](Infinitely-reusable-TMs) or to tie the use of the TM Overworld moves to needing to have a copy of the TM in the bag, you can link them to badges if you'd like, or have no other requirements except having a pokemon capable of learning the move.
@@ -18,6 +16,8 @@ For the TM overworld moves, my assumption is that you've already implemented [In
 A major feature of this tutorial is adding location checks when populating the Pokemon Submenu, so that the submenu does not get cluttered with Overworld moves in situations where you can't even use them anyways.
 
 Please Note: There is a graphical glitch if you try to clear a Whirlpool without the required badge, but the glitch seems to be harmless. Just keep this in mind, and let me know if there are any issues that come up! I'm very active on the Pret Discord.
+
+This code should be compatible with most other features. Edits will be needed to work with Pokecrystal16. Will add those to this tutorial when I can. You can also easily adapt this tutorial to be compatible with add new Overworld moves you may add or remove. Similarly, if you change the TMs or Move Tutor Moves of the game, you may not need to make any edits at all. 
 
 ## Contents
 
@@ -965,6 +965,42 @@ These two are special. We only check if the pokemon knows the move, they don't r
 ```
 
 ## 17. OPTIONAL TM Flag Array or Polished Crystal Compatibility
+
+Changes for [Polished Crystal](https://github.com/Rangi42/polishedcrystal) by Rangi:
+
+Polished Crystal changes Rock Smash to Brick Break, so any mention of Rock Smash in the code will need to have that minor edit.
+
+Polished Crystal also removes Headbutt as a TM Move (it's a move tutor move instead, so the functions that test TM/HM/Move tutor moves will still work) so remove the bag check for Headbutt.
+
+Polished Crystal also removes Sweet Scent from the game, so remove the call and function for it entirely.
+
+Lastly, Polished Crystal uses a very nice Flag Array for the Infinite-use TM's. Other hacks may have this too, although the Infinite TM use tutorial doesn't say how to implement it. Just in case, here it is. 
+
+Any References to checking TM/HMs in the bag will need to be changed to a slightly longer version. 
+
+Here is an example with Fly:
+
+```diff
+-	ld a, HM_FLY
+-	ld [wCurItem], a
+-	ld hl, wNumItems
+-	call CheckItem
+-	ret nc ; .fail, hm isnt in bag
+-	
++	ld a, HM_FLY
++	push bc
++	push de
++	ld e, a
++	ld d, 0
++	ld b, CHECK_FLAG
++	ld hl, wTMsHMs
++	call FlagAction
++	ld a, c
++	pop de
++	pop bc
++	and a
++	ret z ; ; .fail, hm isnt in bag
+```
 
 ## 18. OPTIONAL New Pokecrystal16 Compatibility
 
