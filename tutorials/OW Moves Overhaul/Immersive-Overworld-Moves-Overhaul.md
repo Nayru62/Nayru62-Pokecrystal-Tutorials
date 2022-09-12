@@ -522,7 +522,9 @@ HasRockSmash:
 
 Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
 
-Don't be intimiated lol
+The main differences between the submenu and the interaction moves are that the submenu doesn't check the whole party at once. When we click the party Mon from our list in the party menu, the submenu is populated at that moment, for that single pokemon. We are only checking one mon at a time. Normally, this function, ```GetMonSubmenuItems``` checks the 4 moves of the pokemon. We remove that code and use it later as a seperate function used by these new functions we've called below.
+
+The new functions determine if that OW move will be added to the submenu, in the order called. For example, if a pokemon can use Flash and Sweet Scent, Flash will be above Sweet Scent on the submenu in the example shown below. Feel free to re-arrange the order you call these functions, it makes no difference in how the overall system behaves. 
 
 ```diff
 GetMonSubmenuItems:
@@ -533,7 +535,30 @@ GetMonSubmenuItems:
 	ld a, [wLinkMode]
 	and a
 	jr nz, .skip_moves
+-	ld a, MON_MOVES
+-	call GetPartyParamLocation
+-	ld d, h
+-	ld e, l
+-	ld c, NUM_MOVES
+-.loop
+-	push bc
+-	push de
+-	ld a, [de]
+-	and a
+-	jr z, .next
+-	push hl
+-	call IsFieldMove
+-	pop hl
+-	jr nc, .next
+-	call AddMonMenuItem
 -
+-.next
+-	pop de
+-	inc de
+-	pop bc
+-	dec c
+-	jr nz, .loop
++
 +	call CanUseFlash
 +	call CanUseFly
 +	call CanUseDig
@@ -541,7 +566,7 @@ GetMonSubmenuItems:
 +	call CanUseTeleport
 +	call CanUseSoftboiled
 +	call CanUseMilkdrink
--
+
 .skip_moves
 	ld a, MONMENUITEM_STATS
 	call AddMonMenuItem
@@ -554,6 +579,12 @@ GetMonSubmenuItems:
 ## 10. New Submenu Functions
 
 Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
+
+I put all these functions at the end of the file.
+
+So our new functions are: ```CheckMonCanLearn_TM_HM``` (which also checks the Move tutor moves as they are included in the list), ```CheckMonKnowsMove``` and ```CheckLvlUpMoves```. The two helper functions, ```MonSubMenu_SkipEvolutions``` and ```MonSubMenu_GetNextEvoAttackByte``` are used by ```CheckLvlUpMoves``` exactly the same as we've previously implemented in ```engine/events/overworld.asm```.
+
+The code for ```CheckMonKnowsMove``` is pretty much exactly what we removed from ```GetMonSubmenuItems``` earlier.
 
 
 ```diff
@@ -655,16 +686,38 @@ Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.
 
 Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
 
+Again, I put ALL the following functions at the end of the file for convinience.
+
+Similarly to the interactable moves that we edited in ```engine/events/overworld.asm```, we use a multi-step system, but with a few changes. Namely, we check if the Pokemon knows the Move and allow it to be added to th submenu if it does know the Move, without checking if the TM/HM is in the bag.
+
+I'll go into more detail later (the change was made because of Sweet Scent), ultimately it doesn't matter as all the checks will work in almost any order as long as you properly edit the return conditions to follow the logic you want.
+
+But the change was made because some pokemon like Oddish learn Sweet Scent at a very early level, and you can aquire Oddish before you get the TM for Sweet Scent. And I figured, as long as the pokemon knows the move why should you need the TM? You can also use this logic for the functions in ```engine/events/overworld.asm``` if you like. Basically, instead of failing when a mon doesn't know the move, you simply change the logic to jump to success if it does know it.
+
+The second big changes you'll see are Location Appropiateness checks. For Flash, we don't want it to be shown on the Submenu unless we're in a Dark Cave or in the special Aerodactyl chamber puzzle room. Once you do use Flash in a dark cave, it's no longer dark, so it won't appear in the submenu after that unless you exit and re-enter the cave.
+
+A small change is that we now check TM/HM/Move tutor moves in a seperate function from the Lvl Up learn sets. Not a big deal, it was just easier to combine the check in ```engine/events/overworld.asm```.
+
+Individual Steps:
+
+Step 1: Badge Check
+Step 2: Location Check
+Step 3: Check if Mon knows Move. If yes, skip to adding move to submenu. if no, go to step 4
+Step 4: Check for TM/HM in bag
+Step 5: Check if Mon can learn move from TM/HM/Move Tutor. If yes, add to submenu. if no, check LVL-UP
+Step 6: Check if Mon can learn move from LVL-UP. If this step fails, return without adding move to submenu
 
 ```diff
 +CanUseFlash:
++; Step 1: Badge Check
 +	ld de, ENGINE_ZEPHYRBADGE
 +	ld b, CHECK_FLAG
 +	farcall EngineFlagAction
 +	ld a, c
 +	and a
 +	ret z ; .fail, dont have needed badge
-+; Flash
++
++; Step 2: Location Check
 +	farcall SpecialAerodactylChamber
 +	jr c, .valid_location ; can use flash
 +	ld a, [wTimeOfDayPalset]
@@ -672,21 +725,25 @@ Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.
 +	ret nz ; .fail ; not a darkcave
 +
 +.valid_location
++; Step 3: Check if Mon knows Move
 +	ld a, FLASH
 +	call CheckMonKnowsMove
 +	and a
 +	jr z, .yes
 +
++; Step 4: Check for TM/HM in bag
 +	ld a, HM_FLASH
 +	ld [wCurItem], a
 +	ld hl, wNumItems
 +	call CheckItem
 +	ret nc ; hm isnt in bag
 +
++; Step 5: Check if Mon can learn move from TM/HM/Move Tutor
 +	ld a, FLASH
 +	call CheckMonCanLearn_TM_HM
 +	jr c, .yes
 +
++; Step 6: Check if Mon can learn move from LVL-UP
 +	ld a, FLASH
 +	call CheckLvlUpMoves
 +	ret c ; fail
@@ -701,9 +758,11 @@ Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.
 
 Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
 
+Almost identical to Flash, except the Location check is simply if the Player is outdoors or not.
 
 ```diff
 +CanUseFly:
++; Step 1: Badge Check
 +	ld de, ENGINE_STORMBADGE
 +	ld b, CHECK_FLAG
 +	farcall EngineFlagAction
@@ -711,25 +770,30 @@ Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.
 +	and a
 +	ret z ; .fail, dont have needed badge
 +
++; Step 2: Location Check
 +	call GetMapEnvironment
 +	call CheckOutdoorMap
 +	ret nz ; not outdoors, cant fly
 +
++; Step 3: Check if Mon knows Move
 +	ld a, FLY
 +	call CheckMonKnowsMove
 +	and a
 +	jr z, .yes
 +
++; Step 4: Check if HM is in bag
 +	ld a, HM_FLY
 +	ld [wCurItem], a
 +	ld hl, wNumItems
 +	call CheckItem
 +	ret nc ; .fail, hm isnt in bag
 +
++; Step 5: Check if mon can learn move via HM/TM/Move Tutor
 +	ld a, FLY
 +	call CheckMonCanLearn_TM_HM
 +	jr c, .yes
 +
++; Step 6: Check if Mon can learn move via LVL-UP
 +	ld a, FLY
 +	call CheckLvlUpMoves
 +	ret c ; fail
@@ -743,32 +807,38 @@ Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.
 
 Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
 
+No badge check needed, first we check if the location is appropiate. Thankfully we can use already existing functions that determine if Sweet Scent will work or not, and use them here to check the location. Sweet scent will only work in caves if we're not sliding on ice, or in a patch of grass, or in a dungeon with an encounter rate like Ilex Forest.
 
 ```diff
 +Can_Use_Sweet_Scent:
++; Step 1: Location check
 +	farcall CanUseSweetScent
-+	ret nc ; .no_battle
++	ret nc
 +	farcall GetMapEncounterRate
 +	ld a, b
 +	and a
-+	ret z ; .no_battle
++	ret z
 +
 +.valid_location
++; Step 2: Check if mon knows Move 
 +	ld a, SWEET_SCENT
 +	call CheckMonKnowsMove
 +	and a
 +	jr z, .yes
 +
++; Step 3: Check if TM is in bag
 +	ld a, TM_SWEET_SCENT
 +	ld [wCurItem], a
 +	ld hl, wNumItems
 +	call CheckItem
 +	ret nc ; .fail, tm not in bag
 +
++; Step 4: Check if mon can learn Move via TM/HM/Move tutor
 +	ld a, SWEET_SCENT
 +	call CheckMonCanLearn_TM_HM
 +	jr c, .yes
 +
++; Step 5: Check if mon can learn move via LVL-UP
 +	ld a, SWEET_SCENT
 +	call CheckLvlUpMoves
 +	ret c ; fail
@@ -781,10 +851,11 @@ Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.
 ## 14. Dig
 
 Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
-
+Pretty simple, Dig is a TM so we do check for it in Step 3. First check is the location check, Dig will fail if not in a cave or a dungeon like the Rocket Hideout.
 
 ```diff
 +CanUseDig:
++; Step 1: Location Check
 +	call GetMapEnvironment
 +	cp CAVE
 +	jr z, .valid_location
@@ -792,21 +863,25 @@ Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.
 +	ret nz ; fail, not inside cave or dungeon
 +
 +.valid_location
++; Step 2: Check if Mon knows Move
 +	ld a, DIG
 +	call CheckMonKnowsMove
 +	and a
 +	jr z, .yes
 +
++; Step 3: Check if TM/HM is in bag
 +	ld a, TM_DIG
 +	ld [wCurItem], a
 +	ld hl, wNumItems
 +	call CheckItem
 +	ret nc ; .fail ; TM not in bag
 +
++; Step 4: Check if Mon can learn Dig via TM/HM/Move Tutor
 +	ld a, DIG
 +	call CheckMonCanLearn_TM_HM
 +	jr c, .yes
 +
++; Step 5: Check if Mon can learn move via LVL-UP
 +	ld a, DIG
 +	call CheckLvlUpMoves
 +	ret c ; fail
@@ -820,18 +895,22 @@ Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.
 
 Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
 
+Pretty simple. The location check for Teleport is that we're outdoors. Teleport will fail if you try to use it indoors or in a cave. There's no TM or Move Tutor for Teleport so we don't have the ```CheckMonCanLearn_TM_HM``` step. Feel free to add it if you make Teleport into a TM, or add a badge check if you feel it's appropiate.
 
 ```diff
 +CanUseTeleport:
++; Step 1: Location Check
 +	call GetMapEnvironment
 +	call CheckOutdoorMap
 +	ret nz ; .fail
 +	
++; Step 2: Check if mon knows move
 +	ld a, TELEPORT
 +	call CheckMonKnowsMove
 +	and a
 +	jr z, .yes
 +
+++; Step 3: Check if mon learns move via LVL-UP
 +	ld a, TELEPORT
 +	call CheckLvlUpMoves
 +	ret c ; fail
@@ -845,6 +924,7 @@ Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.
 
 Edit [engine\pokemon\mon_submenu.asm](../blob/master/engine/pokemon/mon_submenu.asm):
 
+These two are special. We only check if the pokemon knows the move, they don't require badges (unless you want them to) and they don't have TMs or Move Tutor moves. But even if they did, the Pokemon would still need to actually know the move. In order to use these moves on the submenu, PP is consumed. So the Mon needs to actually know the move or else they will fail and not do anything. So we will only show them on the submenu if the Pokemon knows the move.
 
 ```diff
 +CanUseSoftboiled:
