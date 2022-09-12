@@ -701,11 +701,17 @@ A small change is that we now check TM/HM/Move tutor moves in a seperate functio
 Individual Steps:
 
 Step 1: Badge Check
+
 Step 2: Location Check
+
 Step 3: Check if Mon knows Move. If yes, skip to adding move to submenu. if no, go to step 4
+
 Step 4: Check for TM/HM in bag
+
 Step 5: Check if Mon can learn move from TM/HM/Move Tutor. If yes, add to submenu. if no, check LVL-UP
+
 Step 6: Check if Mon can learn move from LVL-UP. If this step fails, return without adding move to submenu
+
 
 ```diff
 +CanUseFlash:
