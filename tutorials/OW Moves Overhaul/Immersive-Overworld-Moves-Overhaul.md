@@ -1,3 +1,11 @@
+![bayleef_moves](https://user-images.githubusercontent.com/110363717/189774774-7e647b09-120f-4c19-8246-76544354d3e7.png)
+![bayleef_flash_sweetscet](https://user-images.githubusercontent.com/110363717/189774834-888eabfc-7a0e-4de0-af56-1ffec610144d.png)
+
+
+![lanturn_no_waterfall](https://user-images.githubusercontent.com/110363717/189774794-2f15a7e5-150a-44e0-9704-bd35eb3ff2f8.png)
+![lanturn_used_waterfall](https://user-images.githubusercontent.com/110363717/189774882-ce9c3f5b-17c2-4e3d-a4de-66a50cb6ed5b.png)
+
+
 
 Finally got around to writing this after getting the idea two years ago lol, nearly dying from an extremely rare autoimmune disease has a way of messing with your hobbies. So this code is relatively old, and though I've tested it recently, there may be problems I've missed. Feel free to DM me in the Pret Discord or just post the issues to the Main Pokecrystal channel! 
 
