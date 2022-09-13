@@ -2,6 +2,8 @@ import glob
 
 filenames = glob.glob('data/pokemon/base_stats/*.asm')
 mondata = {
+## NOTE: Uses Bulbapedia format not the actual format used in the implementation, reordered later
+### HP, ATK, DEF, SP.ATK, SP.DEF, SPEED
 'data/pokemon/base_stats/abra.asm': ['0', '0', '0', '1', '0', '0'],
 'data/pokemon/base_stats/aerodactyl.asm': ['0', '0', '0', '0', '0', '2'],
 'data/pokemon/base_stats/aipom.asm': ['0', '0', '0', '0', '0', '1'],
@@ -270,9 +272,9 @@ for filename in filenames:
 					hpEV = mondata[filename][0]
 					atkEV = mondata[filename][1]
 					defEV = mondata[filename][2]
-					spdEV = mondata[filename][3]
-					satEV = mondata[filename][4]
-					sdfEV = mondata[filename][5]
+					spdEV = mondata[filename][5]
+					satEV = mondata[filename][3]
+					sdfEV = mondata[filename][4]
 					#
 					file.write('\tevs  %s,   %s,   %s,   %s,   %s,   %s\n' % (hpEV, atkEV, defEV, spdEV, satEV, sdfEV ))
 					count += 1
