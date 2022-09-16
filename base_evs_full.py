@@ -270,9 +270,9 @@ for filename in filenames:
 					hpEV = mondata[filename][0]
 					atkEV = mondata[filename][1]
 					defEV = mondata[filename][2]
-					spdEV = mondata[filename][3]
-					satEV = mondata[filename][4]
-					sdfEV = mondata[filename][5]
+					spdEV = mondata[filename][5]
+					satEV = mondata[filename][3]
+					sdfEV = mondata[filename][4]
 					#
 					file.write('\tevs  %s,   %s,   %s,   %s,   %s,   %s\n' % (hpEV, atkEV, defEV, spdEV, satEV, sdfEV ))
 					count += 1
