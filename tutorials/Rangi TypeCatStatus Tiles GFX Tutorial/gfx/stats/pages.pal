@@ -1,0 +1,10 @@
+; pink & green
+	RGB 31, 31, 31
+	RGB 31, 15, 31
+	RGB 17, 31, 00
+	RGB 00, 00, 00
+; blue & orange
+	RGB 31, 31, 31
+	RGB 17, 31, 31
+	RGB 30, 22, 12
+	RGB 00, 00, 00
