@@ -8,6 +8,12 @@ The code for this feature was adapted from [Polished Crystal by Rangi](https://g
 
 - Type, Move Category, and Status Condition Text will change to Custom GFX Tiles made by Rangi featured in [Polished Crystal](https://github.com/Rangi42/polishedcrystal). 
 
+This code should be compatible with any other features.
+
+Small edits will need to be made for using [Physical/Special Split](https://github.com/pret/pokecrystal/wiki/Physical-Special-split) and [4th Stats Page](https://github.com/pret/pokecrystal/wiki/Add-a-fourth-stats-page). Short Follow-on Tutorials will be linked at the end of the relevant sections to provide these compatability edits.
+
+For [Fairy Type](https://github.com/pret/pokecrystal/wiki/Add-a-new-type) (or any other custom Types), one only needs to edit the palette file ```gfx\types_cats_status_pals.asm``` which will be indicated in the appropiate step.
+
 ### Table of Contents
 
 1. [Add the GFX Files](#step1)
@@ -36,11 +42,11 @@ The code for this feature was adapted from [Polished Crystal by Rangi](https://g
 
 7. [Move Mangement Menu (Phys/Spec Split)](#step7)
 
-	7.1 [Move Mangement Menu: Set-Up (Phys/Spec Split)](#step7sub1)
+	7.1 [Move Mangement Menu: Set-Up](#step7sub1)
 
-	7.2 [Move Mangement Menu: Main Code (Phys/Spec Split)](#step7sub2)
+	7.2 [Move Mangement Menu: Main Code](#step7sub2)
 
-	7.3 [Move Mangement Menu: CGB Layout (Phys/Spec Split)](#step7sub3)
+	7.3 [Move Mangement Menu: CGB Layout](#step7sub3)
 
 8. [Stats Screen](#step8)
 
@@ -52,25 +58,21 @@ The code for this feature was adapted from [Polished Crystal by Rangi](https://g
 
 	8.4 [Stats Screen: Fixing Page indicator boxes](#step8sub4)
 
-	 8.4.1 [Stats Screen: Fixing Page indicator boxes (Vanilla, no 4th Stats Page)](#step8sub4alt1)
-
-	 8.4.2 [Stats Screen: Fixing Page indicator boxes (Implemented 4th Stats Page)](#step8sub4alt2)
-
 	8.5 [Stats Screen: CGB Layout](#step8sub5)
 
-9. [Battle Move Info Box (Phys/Spec Split)](#step9)
+9. [Battle Move Info Box](#step9)
 
-	9.1 [Battle: Preparation (Phys/Spec Split) in engine\battle\\](#step9sub1)
+	9.1 [Battle: Preparation in engine\battle\\](#step9sub1)
 
-	9.2 [Battle: Preparation (Phys/Spec Split) in engine\gfx\colors.asm](#step9sub2)
+	9.2 [Battle: Preparation in engine\gfx\colors.asm](#step9sub2)
 
 	9.3 [Battle: Main Code in engine\pokemon\mon_stats.asm](#step9sub3)
 
 	9.4 [Battle: Main Code for Status Condition Tiles in engine\battle\core.asm](#step9sub4)
 
-	9.5 [Battle: Main Code for MoveInfoBox (Phys/Spec Split) in engine\battle\core.asm](#step9sub5)
+	9.5 [Battle: Main Code for MoveInfoBox in engine\battle\core.asm](#step9sub5)
 
-	9.6 [Battle: CGB Layout (Phys/Spec Split)](#step9sub6)
+	9.6 [Battle: CGB Layout](#step9sub6)
 
 10. [Conclusion: Clean-up](#step10)
 11. [Results](#step11)
@@ -79,9 +81,6 @@ The code for this feature was adapted from [Polished Crystal by Rangi](https://g
 
 If you follow this tutorial closely, you do not really need to bother to learn how to use custom GFX.
 However, if you pay attention to the step-by-step explanations, you'll have an invaluable skill you'll be able to use for any future custom GFX in any other endeavor you might want to do.
-
-This code should be compatible with any other features.
-Small edits will need to be made for using Physical/Special Split, or using the Fairy Type (or any other custom Types).
 
 ## Baseline GFX Information
 
@@ -154,13 +153,14 @@ Now that the basic foundational information about GFX has been covered, the tuto
 - [gfx\battle\status.png](https://user-images.githubusercontent.com/110363717/243224986-33ee4257-60af-4ded-b169-448a34d3046b.png)
 - [gfx\battle\status-enemy.png](https://user-images.githubusercontent.com/110363717/243224945-f2dec812-5439-4ac0-808a-d060f765b12e.png)
 - Replace [gfx\stats\stats_tiles.png](https://github.com/Nayru62/Nayru62-Pokecrystal-Tutorials/blob/main/tutorials/Rangi%20TypeCatStatus%20Tiles%20GFX%20Tutorial/gfx/stats/stats_tiles.png)
-- Replace [gfx\fonts\english.png](https://user-images.githubusercontent.com/110363717/243225084-13d7f4b0-94b8-4006-82e8-5a693022fda2.png) and also ```gfx\fonts\font.asm```. They are identical files in English versions of the game. NOTE: If a different language or font PNG file is being used, just add the Percent Tile (%) added in this PNG, and put it in the same spot in the correct font PNG file and it should be loaded normally. The percent symbol is not in the Vanilla game for some reason, and it's going to be used when displaying chance-related data like Move Accuracy and Move Effect Chance.
+- Replace [gfx\fonts\font.png](https://user-images.githubusercontent.com/110363717/243225084-13d7f4b0-94b8-4006-82e8-5a693022fda2.png) and also ```gfx\fonts\english.asm```. 
+	- They are identical files in English versions of the game. NOTE: If a different language or font PNG file is being used, just add the Percent Tile (%) added in this PNG, and put it in the same spot in the correct font PNG file and it should be loaded normally. The percent symbol is not in the Vanilla game for some reason, and it's going to be used when displaying chance-related data like Move Accuracy and Move Effect Chance. If you want matching files for Overworld and Inverted Fonts with the Percent Symbol.
 
-- Edit ```charmap.asm``` (it's in the root directory) so that the new % symbol can be referred to with "%" and in strings:
+- Edit ```charmap.asm``` (it's in the root directory) so that the new % symbol can be referred to with "<%>" and in strings:
 ```diff
 	...
 	charmap "-",         $e3
-+	charmap "%",         $e5
++	charmap "<%>",       $e5
 	charmap "?",         $e6
 	...
 ```
@@ -804,25 +804,6 @@ In battle, if the Party Menu is opened to Switch during your turn, OR when the b
 
 This entire section will take place within ```engine\pokemon\party_menu.asm```.
 
-- Edit the function ```PlacePartyMonLevel```:
-
-This will fix pokemon at lvl 100 deleting the LVL symbol that is usually next to the Pokemon's lvl, so the Party Menu appear uniform and pleasing to look at.
-```diff
-	ld a, "<LV>"
-	ld [hli], a
-	lb bc, PRINTNUM_LEFTALIGN | 1, 2
--	; jr .okay
-+	jr .okay
-.ThreeDigits:
-+	dec hl
-+	ld a, "<LV>"
-+	ld [hli], a
-	lb bc, PRINTNUM_LEFTALIGN | 1, 3
--; .okay
-+.okay
-	call PrintNum
-```
-
 - Create the function ```LoadStatusIconSet``` at the end of ```engine\pokemon\party_menu.asm```:
 
 This function may look long and complicated, but it isn't. It's very similar to what was already done in ```engine\gfx\color.asm``` with the new ```InitPartyMenuStatusPals``` function. The same action is being repeated six times, once for each Status Condition, minus Toxic, since Toxic only persists in Battle.
@@ -1252,7 +1233,7 @@ PlaceMoveData:
 +	ld de, String_MoveAcc ; string for "ACC"
 	call PlaceString
 +	hlcoord 18, 12
-+	ld [hl], "%"
++	ld [hl], "<%>"
 +
 +	; getting the actual Move's accuracy
 	ld a, [wCurSpecies]
@@ -1296,7 +1277,7 @@ PlaceMoveData:
 +	ld de, String_MoveChance ; string for "EFCT"
 +	call PlaceString
 +	hlcoord 18, 13
-+	ld [hl], "%"
++	ld [hl], "<%>"
 +.no_efct_chance
 +
 +; Print BP Num
@@ -2925,7 +2906,7 @@ Next, are more changes inside ```MoveInfoBox```, where the Tiles will be placed.
 +	ld de, .accuracy_string ; "ACC"
 +	call PlaceString
 +	hlcoord 7, 9
-+	ld [hl], "%"
++	ld [hl], "<%>"
 +	hlcoord 4, 9
 +	ld a, [wPlayerMoveStruct + MOVE_ACC]
 +; convert from hex to decimal
@@ -3115,4 +3096,6 @@ The edits in this section aren't too bad.
 Congratulations! Here is the results:
 
 ## 12. Follow On Suggestions <a name="step12"></a>
-- Link to Colored Gender and Shiny Icons in Battle and StatsScreen 
+- Changes needed for Physical/Special Split
+- Changes needed for 4th Stats Page
+- Link to Colored Gender and Shiny Icons in Battle and StatsScreen
