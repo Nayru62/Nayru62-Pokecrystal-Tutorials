@@ -297,20 +297,8 @@ HandleBetweenTurnEffects:
 	call LoadTilemapToTempTilemap
 	jp HandleEncore
 
-HasAnyoneFainted:
-	call HasPlayerFainted
-	jp nz, HasEnemyFainted
-	ret
-
 CheckFaint_PlayerThenEnemy:
-.faint_loop
-	call .Function
-	ret c
-	call HasAnyoneFainted
-	ret nz
-	jr .faint_loop
-
-.Function:
+; BUG: Perish Song and Spikes can leave a Pokemon with 0 HP and not faint (see docs/bugs_and_glitches.md)
 	call HasPlayerFainted
 	jr nz, .PlayerNotFainted
 	call HandlePlayerMonFaint
@@ -335,14 +323,7 @@ CheckFaint_PlayerThenEnemy:
 	ret
 
 CheckFaint_EnemyThenPlayer:
-.faint_loop
-	call .Function
-	ret c
-	call HasAnyoneFainted
-	ret nz
-	jr .faint_loop
-
-.Function:
+; BUG: Perish Song and Spikes can leave a Pokemon with 0 HP and not faint (see docs/bugs_and_glitches.md)
 	call HasEnemyFainted
 	jr nz, .EnemyNotFainted
 	call HandleEnemyMonFaint
@@ -411,20 +392,11 @@ HandleBerserkGene:
 	call GetPartyLocation
 	xor a
 	ld [hl], a
+; BUG: Berserk Gene's confusion lasts for 256 turns or the previous Pokémon's confusion count (see docs/bugs_and_glitches.md)
 	ld a, BATTLE_VARS_SUBSTATUS3
 	call GetBattleVarAddr
 	push af
 	set SUBSTATUS_CONFUSED, [hl]
-	ldh a, [hBattleTurn]
-	and a
-	ld hl, wPlayerConfuseCount
-	jr z, .set_confuse_count
-	ld hl, wEnemyConfuseCount
-.set_confuse_count
-	call BattleRandom
-	and %11
-	add 2
-	ld [hl], a
 	ld a, BATTLE_VARS_MOVE_ANIM
 	call GetBattleVarAddr
 	push hl
@@ -1067,6 +1039,7 @@ ResidualDamage:
 	jr z, .check_toxic
 	ld de, wEnemyToxicCount
 .check_toxic
+
 	ld a, BATTLE_VARS_SUBSTATUS5
 	call GetBattleVar
 	bit SUBSTATUS_TOXIC, a
@@ -3535,6 +3508,8 @@ OfferSwitch:
 	call ClearPalettes
 	call DelayFrame
 	call _LoadHPBar
+	call GetBattleMonBackpic
+	call WaitBGMap
 	pop af
 	ld [wCurPartyMon], a
 	xor a
@@ -3547,6 +3522,8 @@ OfferSwitch:
 	call ClearPalettes
 	call DelayFrame
 	call _LoadHPBar
+	call GetBattleMonBackpic
+	call WaitBGMap
 
 .said_no
 	pop af
@@ -3842,7 +3819,7 @@ TryToRunAwayFromBattle:
 	call LoadTilemapToTempTilemap
 	xor a ; BATTLEPLAYERACTION_USEMOVE
 	ld [wBattlePlayerAction], a
-	ld a, $f
+	ld a, BATTLEACTION_FORFEIT
 	ld [wCurMoveNum], a
 	xor a
 	ld [wCurPlayerMove], a
@@ -4220,17 +4197,16 @@ PursuitSwitch:
 	or [hl]
 	jr nz, .done
 
+; BUG: A Pokémon that fainted from Pursuit will have its old status condition when revived (see docs/bugs_and_glitches.md)
 	ld a, $f0
 	ld [wCryTracks], a
 	ld a, [wBattleMonSpecies]
 	call PlayStereoCry
-	ld a, [wCurBattleMon]
-	push af
 	ld a, [wLastPlayerMon]
-	ld [wCurBattleMon], a
-	call UpdateFaintedPlayerMon
-	pop af
-	ld [wCurBattleMon], a
+	ld c, a
+	ld hl, wBattleParticipantsNotFainted
+	ld b, RESET_FLAG
+	predef SmallFarFlagAction
 	call PlayerMonFaintedAnimation
 	ld hl, BattleText_MonFainted
 	jr .done_fainted
@@ -4716,42 +4692,28 @@ PrintPlayerHUD:
 	callfar GetGender
 	ld a, " "
 	jr c, .got_gender_char
-	ld a, $5e ; "♂"
+	ld a, "♂"
 	jr nz, .got_gender_char
-	ld a, $5f ; "♀"a
+	ld a, "♀"
 
 .got_gender_char
-	and a ; to clear the carry flag from GetGender
-
-	hlcoord 17, 8 ; gender char
+	hlcoord 17, 8
 	ld [hl], a
+; Player Mon Status Condition GFX
+	predef Player_LoadNonFaintStatus ; loads needed Status Conditon GFX into VRAM
+ 	ld a, c
+	and a 
+	jr z, .status_done ; if Mon is fainted, or it doesnt have a Status Cond, dont print Tiles
+; place status tiles:
 	hlcoord 10, 8 ; status icon tile 1
-	push af ; back up gender
-	push hl
-	farcall Player_CheckToxicStatus
-	jr nc, .status_nottoxic
-	pop hl
 	ld [hl], $70
 	inc hl
 	ld [hl], $71
 .status_done
-	pop bc
-	hlcoord 14, 8
-	ld a, b
-	cp " "
-	jr nz, .copy_level ; male or female
-	; dec hl ; genderless
-
-.copy_level
+	hlcoord 14, 8 ; where the player mon's lvl is printed
 	ld a, [wBattleMonLevel]
 	ld [wTempMonLevel], a
 	jp PrintLevel
-
-.status_nottoxic
-	pop hl
-	ld de, wBattleMonStatus
-	predef Player_PlaceNonFaintStatus
-	jr .status_done
 
 UpdateEnemyHUD::
 	push hl
@@ -4804,29 +4766,24 @@ DrawEnemyHUD:
 	callfar GetGender
 	ld a, " "
 	jr c, .got_gender
-	ld a, $5e ; "♂"
+	ld a, "♂"
 	jr nz, .got_gender
-	ld a, $5f ; "♀"
+	ld a, "♀"
 
 .got_gender
 	hlcoord 9, 1
 	ld [hl], a
-
+; Enemy Status Condition GFX
+	predef Enemy_LoadNonFaintStatus ; load Status Condition GFX Tiles
+	ld a, c
+	and a
+	jr z, .status_done ; if Mon is fainted, or it doesnt have a Status Cond, dont print Tiles
 	hlcoord 2, 1
-	push hl
-	farcall Enemy_CheckToxicStatus
-	jr z, .status_nottoxic
-	pop hl
-	ld [hl], $72
+	ld [hl], $72 ; enemy status left half
 	inc hl
-	ld [hl], $73
-	jr .status_done
-.status_nottoxic
-	pop hl
-	ld de, wEnemyMonStatus
-	predef Enemy_PlaceNonFaintStatus
+	ld [hl], $73 ; enemy status left half
 .status_done
-	hlcoord 6, 1
+	hlcoord 6, 1 ; enemy's level
 	ld a, [wEnemyMonLevel]
 	ld [wTempMonLevel], a
 	call PrintLevel
@@ -5470,8 +5427,6 @@ MoveSelectionScreen:
 	ld [w2DMenuFlags2], a
 	ld a, $10
 	ld [w2DMenuCursorOffsets], a
-	ld b, SCGB_BATTLE_COLORS
-	call GetSGBLayout
 .menu_loop
 	ld a, [wMoveSelectionMenuType]
 	and a
@@ -5526,12 +5481,14 @@ MoveSelectionScreen:
 	ld a, b
 	ld [wCurMoveNum], a
 	jr nz, .use_move
+
 	pop af
 	ret
 
 .use_move
 	pop af
 	ret nz
+
 	ld hl, wBattleMonPP
 	ld a, [wMenuCursorY]
 	ld c, a
@@ -5690,9 +5647,9 @@ MoveInfoBox:
 	xor a
 	ldh [hBGMapMode], a
 
-	hlcoord 0, 7
-	ld b, 4
-	ld c, 7
+	hlcoord 0, 7 ; upper right corner of the textbox
+	ld b, 4 ; Box height
+	ld c, 7 ; Box length
 	call Textbox
 	call MobileTextBorder
 
@@ -5746,19 +5703,18 @@ MoveInfoBox:
 	call SetPalettes
 
 	ld a, [wPlayerMoveStruct + MOVE_TYPE]
-	and TYPE_MASK
 	ld c, a ; farcall will clobber a for the bank
 	farcall GetMonTypeIndex
-	ld a, c
-	ld hl, TypeIconGFX
-	ld bc, 4 * LEN_1BPP_TILE
+	ld a, c ; Type Index
+	ld hl, TypeIconGFX ; from gfx\battle\types.png, uses Color 4
+	ld bc, 4 * LEN_1BPP_TILE ; Type GFX is 4 Tiles Wide
 	call AddNTimes
 	ld d, h
 	ld e, l
-	ld hl, vTiles2 tile $55
-	lb bc, BANK(TypeIconGFX), 4
+	ld hl, vTiles2 tile $55 
+	lb bc, BANK(TypeIconGFX), 4 ; bank in 'b', Num of Tiles in 'c'
 	call Request1bpp
-	hlcoord 4, 11
+	hlcoord 4, 11 ; placing the Type Tiles in  the MoveInfoBox
 	ld [hl], $55
 	inc hl
 	ld [hl], $56
@@ -5767,27 +5723,40 @@ MoveInfoBox:
 	inc hl
 	ld [hl], $58
 
+; determine Move's Category
+	; in Vanilla, need to check Move Power first to see if Status Move
+	; then determine Phys/Spec based on Type if attacking move
+	ld a, [wPlayerMoveStruct + MOVE_POWER]
+	and a
+	jr nz, .nonstatusmove
+	ld a, 2 ; Status Move
+	jr .getcategoryGFX
+.nonstatusmove
 	ld a, [wPlayerMoveStruct + MOVE_TYPE]
-	and CATG_MASK
-	swap a
-	srl a
-	srl a
-	dec a
+	cp SPECIAL
+	jr c, .phys
+	ld a, 1 ; category index for Special
+	jr .getcategoryGFX
+.phys
+	xor a
+	; fallthrough
+.getcategoryGFX
+	; 'a' contains Category index: 0 for Phys, 1 for Spec, 2 for Status
 	ld hl, CategoryIconGFX
-	ld bc, 2 tiles
+	ld bc, 2 tiles ; Move Category is 2 Tiles wide 
 	call AddNTimes
 	ld d, h
 	ld e, l
 	ld hl, vTiles2 tile $59
-	lb bc, BANK(CategoryIconGFX), 2
+	lb bc, BANK(CategoryIconGFX), 2 ; bank in 'b', Num of Tiles in 'c'
 	call Request2bpp ; Load 2bpp at b:de to occupy c tiles of hl.
-	hlcoord 1, 11
+	hlcoord 1, 11 ; placing the Category Tiles in the MoveInfoBox
 	ld [hl], $59
 	inc hl
 	ld [hl], $5a
 
-; print move BP
-	ld de, .power_string
+; print move BP (Base Power)
+	ld de, .power_string ; "BP"
 	hlcoord 1, 8
 	call PlaceString
 
@@ -5795,25 +5764,26 @@ MoveInfoBox:
 	ld a, [wPlayerMoveStruct + MOVE_POWER]
 	and a
 	jr nz, .haspower
-	ld de, .nopower_string
+	ld de, .nopower_string ; "---"
 	call PlaceString
 	jr .print_acc
 .haspower	
 	ld [wTextDecimalByte], a
 	ld de, wTextDecimalByte
-	lb bc, 1, 3
+	lb bc, 1, 3 ; number of bytes this number is in, in 'b', number of possible digits in 'c'
 	call PrintNum
 	
 ; print move ACC
 .print_acc
 	hlcoord 1, 9
-	ld de, .accuracy_string
+	ld de, .accuracy_string ; "ACC"
 	call PlaceString
 	hlcoord 7, 9
 	ld [hl], "<%>"
 	hlcoord 4, 9
 	ld a, [wPlayerMoveStruct + MOVE_ACC]
 ; convert from hex to decimal
+; this is the same code used in function "Adjust_Percent" in engine\pokemon\mon_stats.asm
 	ldh [hMultiplicand], a
 	ld a, 100
 	ldh [hMultiplier], a
@@ -5830,12 +5800,8 @@ MoveInfoBox:
 .print_num
 	ld [wTextDecimalByte], a
 	ld de, wTextDecimalByte
-	lb bc, 1, 3
+	lb bc, 1, 3 ; number of bytes this number is in, in 'b', number of possible digits in 'c'
 	call PrintNum
-; print move Effect chance?
-	; call WaitBGMap
-	; ld a, 8
-	; call DelayFrames
 	ld b, SCGB_BATTLE_COLORS
 	call GetSGBLayout
 .done
@@ -5905,7 +5871,8 @@ CheckPlayerHasUsableMoves:
 	jr .loop
 
 .done
-	and PP_MASK
+; BUG: A Disabled but PP Up–enhanced move may not trigger Struggle (see docs/bugs_and_glitches.md)
+	and a
 	ret nz
 
 .force_struggle
@@ -6304,13 +6271,14 @@ LoadEnemyMon:
 	jr nz, .Happiness
 
 ; Get Magikarp's length
+; BUG: Magikarp length limits have a unit conversion error (see docs/bugs_and_glitches.md)
 	ld de, wEnemyMonDVs
 	ld bc, wPlayerID
 	callfar CalcMagikarpLength
 
 ; No reason to keep going if length > 1536 mm (i.e. if HIGH(length) > 6 feet)
 	ld a, [wMagikarpLength]
-	cp 5
+	cp HIGH(1536)
 	jr nz, .CheckMagikarpArea
 
 ; 5% chance of skipping both size checks
@@ -6319,7 +6287,7 @@ LoadEnemyMon:
 	jr c, .CheckMagikarpArea
 ; Try again if length >= 1616 mm (i.e. if LOW(length) >= 4 inches)
 	ld a, [wMagikarpLength + 1]
-	cp 4
+	cp LOW(1616)
 	jr nc, .GenerateDVs
 
 ; 20% chance of skipping this check
@@ -6328,23 +6296,24 @@ LoadEnemyMon:
 	jr c, .CheckMagikarpArea
 ; Try again if length >= 1600 mm (i.e. if LOW(length) >= 3 inches)
 	ld a, [wMagikarpLength + 1]
-	cp 3
+	cp LOW(1600)
 	jr nc, .GenerateDVs
 
 .CheckMagikarpArea:
+; BUG: Magikarp in Lake of Rage are shorter, not longer (see docs/bugs_and_glitches.md)
 	ld a, [wMapGroup]
 	cp GROUP_LAKE_OF_RAGE
-	jr nz, .Happiness
+	jr z, .Happiness
 	ld a, [wMapNumber]
 	cp MAP_LAKE_OF_RAGE
-	jr nz, .Happiness
+	jr z, .Happiness
 ; 40% chance of not flooring
 	call Random
 	cp 39 percent + 1
 	jr c, .Happiness
 ; Try again if length < 1024 mm (i.e. if HIGH(length) < 3 feet)
 	ld a, [wMagikarpLength]
-	cp 3
+	cp HIGH(1024)
 	jr c, .GenerateDVs ; try again
 
 ; Finally done with DVs
@@ -6546,6 +6515,7 @@ LoadEnemyMon:
 	ld bc, NUM_EXP_STATS * 2
 	call CopyBytes
 
+; BUG: PRZ and BRN stat reductions don't apply to switched Pokémon (see docs/bugs_and_glitches.md)
 	ret
 
 CheckSleepingTreeMon:
@@ -6614,7 +6584,7 @@ CheckUnownLetter:
 	inc e
 	inc e
 	ld a, e
-	cp UnlockedUnownLetterSets.End - UnlockedUnownLetterSets
+	cp NUM_UNLOCKED_UNOWN_SETS * 2
 	jr c, .loop
 
 ; Hasn't been unlocked, or the letter is invalid
@@ -6937,11 +6907,10 @@ BadgeStatBoosts:
 	ld hl, wBattleMonAttack
 	ld c, 4
 .CheckBadge:
+; BUG: Glacier Badge may not boost Special Defense depending on the value of Special Attack (see docs/bugs_and_glitches.md)
 	ld a, b
 	srl b
-	push af
 	call c, BoostStat
-	pop af
 	inc hl
 	inc hl
 ; Check every other badge.
@@ -7270,20 +7239,10 @@ GiveExperiencePoints:
 	ld [hl], a
 	jr nc, .no_exp_overflow
 	dec hl
-	push bc
-	push af
-	ld a, [hl]
-	and EXP_MASK
-	ld b, a
 	inc [hl]
-	pop af
-	ld a, b
-	pop bc
-	inc a
 	jr nz, .no_exp_overflow
-	ld a, EXP_MASK
-	ld [hli], a
 	ld a, $ff
+	ld [hli], a
 	ld [hli], a
 	ld [hl], a
 
@@ -7314,19 +7273,13 @@ GiveExperiencePoints:
 	ld a, [hld]
 	sbc c
 	ld a, [hl]
-	push af
-	and EXP_MASK
-	ld d, a
-	pop af
-	ld a, d
 	sbc b
 	jr c, .not_max_exp
 	ld a, b
 	ld [hli], a
 	ld a, c
 	ld [hli], a
-	ldh a, [hQuotient + 3]
-	ld d, a
+	ld a, d
 	ld [hld], a
 
 .not_max_exp
@@ -7617,13 +7570,9 @@ AnimateExpBar:
 	ld [hld], a
 	jr nc, .NoOverflow
 	inc [hl]
-	ld a, [hl]
-	and EXP_MASK
-	and a
 	jr nz, .NoOverflow
-	ld a, EXP_MASK
-	ld [hli], a
 	ld a, $ff
+	ld [hli], a
 	ld [hli], a
 	ld [hl], a
 
@@ -7642,22 +7591,13 @@ AnimateExpBar:
 	ld a, [hld]
 	sbc c
 	ld a, [hl]
-	push de
-	push af
-	and EXP_MASK
-	ld d, a
-	pop af
-	ld a, d
 	sbc b
-	pop de
 	jr c, .AlreadyAtMaxExp
 	ld a, b
 	ld [hli], a
 	ld a, c
 	ld [hli], a
-	ld a, [hl]
-	and CAUGHT_TIME_MASK
-	or d
+	ld a, d
 	ld [hld], a
 
 .AlreadyAtMaxExp:
@@ -7797,6 +7737,7 @@ SendOutMonText:
 	ld hl, GoMonText
 	jr z, .skip_to_textbox
 
+; BUG: Switching out or switching against a Pokémon with max HP below 4 freezes the game (see docs/bugs_and_glitches.md)
 	; compute enemy health remaining as a percentage
 	xor a
 	ldh [hMultiplicand + 0], a
@@ -7807,22 +7748,16 @@ SendOutMonText:
 	ld a, [hl]
 	ld [wEnemyHPAtTimeOfPlayerSwitch + 1], a
 	ldh [hMultiplicand + 2], a
+	ld a, 25
+	ldh [hMultiplier], a
+	call Multiply
 	ld hl, wEnemyMonMaxHP
 	ld a, [hli]
 	ld b, [hl]
-	ld c, 100
-	and a
-	jr z, .shift_done
-.shift_loop
-	rra
+	srl a
 	rr b
-	srl c
-	and a
-	jr nz, .shift_loop
-.shift_done
-	ld a, c
-	ldh [hMultiplier], a
-	call Multiply
+	srl a
+	rr b
 	ld a, b
 	ld b, 4
 	ldh [hDivisor], a
@@ -7894,22 +7829,16 @@ WithdrawMonText:
 	ld a, [de]
 	sbc b
 	ldh [hMultiplicand + 1], a
+	ld a, 25
+	ldh [hMultiplier], a
+	call Multiply
 	ld hl, wEnemyMonMaxHP
 	ld a, [hli]
 	ld b, [hl]
-	ld c, 100
-	and a
-	jr z, .shift_done
-.shift_loop
-	rra
+	srl a
 	rr b
-	srl c
-	and a
-	jr nz, .shift_loop
-.shift_done
-	ld a, c
-	ldh [hMultiplier], a
-	call Multiply
+	srl a
+	rr b
 	ld a, b
 	ld b, 4
 	ldh [hDivisor], a
@@ -8050,13 +7979,6 @@ CalcExpBar:
 	sbc b
 	ld [hld], a
 	ld a, [de]
-	push de
-	push af
-	and EXP_MASK
-	ld d, a
-	pop af
-	ld a, d
-	pop de
 	ld c, a
 	ldh a, [hMathBuffer]
 	sbc c

@@ -1,9 +1,8 @@
-	const_def
-	const PINK_PAGE   ; 0
-	const GREEN_PAGE  ; 1
-	const BLUE_PAGE   ; 2
-	const ORANGE_PAGE ; 3
-NUM_STAT_PAGES EQU const_value
+	const_def 1
+	const PINK_PAGE  ; 1
+	const GREEN_PAGE ; 2
+	const BLUE_PAGE  ; 3
+DEF NUM_STAT_PAGES EQU const_value - 1
 
 DEF STAT_PAGE_MASK EQU %00000011
 
@@ -63,7 +62,12 @@ StatsScreenInit_gotaddress:
 StatsScreenMain:
 	xor a
 	ld [wJumptableIndex], a
-	ld [wStatsScreenFlags], a ; PINK_PAGE
+; ???
+	ld [wStatsScreenFlags], a
+	ld a, [wStatsScreenFlags]
+	and ~STAT_PAGE_MASK
+	or PINK_PAGE ; first_page
+	ld [wStatsScreenFlags], a
 .loop
 	ld a, [wJumptableIndex]
 	and ~(1 << 7)
@@ -76,6 +80,28 @@ StatsScreenMain:
 	ret
 
 StatsScreenMobile:
+	xor a
+	ld [wJumptableIndex], a
+; ???
+	ld [wStatsScreenFlags], a
+	ld a, [wStatsScreenFlags]
+	and ~STAT_PAGE_MASK
+	or PINK_PAGE ; first_page
+	ld [wStatsScreenFlags], a
+.loop
+	farcall Mobile_SetOverworldDelay
+	ld a, [wJumptableIndex]
+	and $7f
+	ld hl, StatsScreenPointerTable
+	rst JumpTable
+	call StatsScreen_WaitAnim
+	farcall MobileComms_CheckInactivityTimer
+	jr c, .exit
+	ld a, [wJumptableIndex]
+	bit 7, a
+	jr z, .loop
+
+.exit
 	ret
 
 StatsScreenPointerTable:
@@ -347,22 +373,20 @@ StatsScreen_JoypadAction:
 
 .a_button
 	ld a, c
-	cp ORANGE_PAGE ; last page
+	cp BLUE_PAGE ; last page
 	jr z, .b_button
 .d_right
 	inc c
-	ld a, ORANGE_PAGE ; last page
+	ld a, BLUE_PAGE ; last page
 	cp c
 	jr nc, .set_page
 	ld c, PINK_PAGE ; first page
 	jr .set_page
 
 .d_left
-	ld a, c
 	dec c
-	and a ; cp PINK_PAGE ; first page
 	jr nz, .set_page
-	ld c, ORANGE_PAGE ; last page
+	ld c, BLUE_PAGE ; last page
 	jr .set_page
 
 .done
@@ -406,13 +430,13 @@ StatsScreen_InitUpperHalf:
 	hlcoord 14, 0
 	call PrintLevel
 	ld hl, .NicknamePointers
-	call GetNicknamenamePointer
+	call GetNicknamePointer
 	call CopyNickname
 	hlcoord 8, 2
 	call PlaceString
 	hlcoord 18, 0
 	call .PlaceGenderChar
-	hlcoord 9, 3
+	hlcoord 9, 4
 	ld a, "/"
 	ld [hli], a
 	ld a, [wBaseDexNo]
@@ -446,9 +470,9 @@ StatsScreen_InitUpperHalf:
 	farcall GetGender
 	pop hl
 	ret c
-	ld a, $32 ; colored "♂"
+	ld a, "♂"
 	jr nz, .got_gender
-	ld a, $33 ; colored "♀"
+	ld a, "♀"
 .got_gender
 	ld [hl], a
 	ret
@@ -483,7 +507,7 @@ StatsScreen_PlaceHorizontalDivider:
 	ret
 
 StatsScreen_PlacePageSwitchArrows:
-	hlcoord 10, 6
+	hlcoord 12, 6
 	ld [hl], "◀"
 	hlcoord 19, 6
 	ld [hl], "▶"
@@ -539,6 +563,7 @@ StatsScreen_LoadGFX:
 .PageTilemap:
 	ld a, [wStatsScreenFlags]
 	maskbits NUM_STAT_PAGES
+	dec a
 	ld hl, .Jumptable
 	rst JumpTable
 	ret
@@ -549,7 +574,6 @@ StatsScreen_LoadGFX:
 	dw LoadPinkPage
 	dw LoadGreenPage
 	dw LoadBluePage
-	dw LoadOrangePage
 	assert_table_length NUM_STAT_PAGES
 
 LoadPinkPage:
@@ -558,28 +582,29 @@ LoadPinkPage:
 	predef DrawPlayerHP
 	hlcoord 8, 9
 	ld [hl], $41 ; right HP/exp bar end cap
-	ld de, .Status_Text
+	ld de, .Status_Text ; string for "STATUS/"
 	hlcoord 0, 12
 	call PlaceString
-	ld de, .Type_Text
+	ld de, .Type_Text ; string for "TYPE/"
 	hlcoord 0, 14
 	call PlaceString
-	call PrintMonTypeTiles
-
+	
+	call PrintMonTypeTiles ; custom GFX function
 	ld a, [wTempMonPokerusStatus]
 	ld b, a
+	ld a, $f
 	and $f
 	jr nz, .HasPokerus
 	ld a, b
 	and $f0
 	jr z, .NotImmuneToPkrs
 	hlcoord 19, 1
-	ld [hl], "." ; Pokérus immunity dot
+	ld [hl], $35 ;"." ; Pokérus immunity dot
 .NotImmuneToPkrs:
 	ld a, [wMonType]
 	cp BOXMON
 	jr z, .done_status
-	
+
 	ld de, wTempMonStatus
 	predef GetStatusConditionIndex
 	ld a, d
@@ -604,9 +629,16 @@ LoadPinkPage:
 	
 	jr .done_status
 .HasPokerus:
-	ld de, .PkrsStr
-	hlcoord 1, 13
-	call PlaceString
+	; ld de, .PkrsStr
+	; hlcoord 1, 13
+	; call PlaceString
+	hlcoord 6, 13
+	ld a, $63
+	ld [hli], a
+	inc a
+	ld [hli], a
+	inc a
+	ld [hl], a
 	jr .NotImmuneToPkrs
 .StatusOK:
 	hlcoord 7, 12
@@ -630,14 +662,6 @@ LoadPinkPage:
 	hlcoord 13, 10
 	lb bc, 3, 7
 	ld de, wTempMonExp
-	ld a, [de]
-	and EXP_MASK
-	ld [wStringBuffer1], a
-	ld a, [wTempMonExp + 1]
-	ld [wStringBuffer1 + 1], a
-	ld a, [wTempMonExp + 2]
-	ld [wStringBuffer1 + 2], a
-	ld de, wStringBuffer1
 	call PrintNum
 	call .CalcExpToNextLevel
 	hlcoord 13, 13
@@ -682,6 +706,7 @@ LoadPinkPage:
 	ld d, a
 	farcall CalcExpAtLevel
 	ld hl, wTempMonExp + 2
+	ld hl, wTempMonExp + 2
 	ldh a, [hQuotient + 3]
 	sub [hl]
 	dec hl
@@ -691,14 +716,7 @@ LoadPinkPage:
 	dec hl
 	ld [wExpToNextLevel + 1], a
 	ldh a, [hQuotient + 1]
-	push af
-	ld e, a
-	ld a, [hl]
-	and EXP_MASK
-	ld d, a
-	pop af
-	ld a, e
-	sbc d
+	sbc [hl]
 	ld [wExpToNextLevel], a
 	ret
 
@@ -728,77 +746,6 @@ LoadPinkPage:
 
 .PkrsStr:
 	db "#RUS@"
-
-PrintMonTypeTiles:
-	call GetBaseData
-	ld a, [wBaseType1]
-	ld c, a ; farcall will clobber a for the bank
-	farcall GetMonTypeIndex
-; load the 1st type pal 
-	; type index is already in c
-	ld de, wBGPals1 palette 7 + 2 ; slot 2 of pal 7, byte 1
-	push af
-	farcall LoadMonBaseTypePal	
-	pop af
-; load the tiles
-	ld hl, TypeLightIconGFX
-	ld bc, 4 * LEN_2BPP_TILE
-	call AddNTimes
-	ld d, h
-	ld e, l
-	ld hl, vTiles2 tile $4c
-	lb bc, BANK(TypeLightIconGFX), 4
-	call Request2bpp
-; 2nd Type
-	ld a, [wBaseType2]
-	ld c, a ; farcall will clobber a for the bank
-	farcall GetMonTypeIndex
-; load the 2nd type pal 
-	; type index is already in c
-	ld de, wBGPals1 palette 7 + 4 ; slot 3 of pal 7, byte 1
-	push af
-	farcall LoadMonBaseTypePal	
-	pop af
-; load type 2 tiles
-	ld hl, TypeDarkIconGFX
-	ld bc, 4 * LEN_2BPP_TILE
-	call AddNTimes
-	ld d, h
-	ld e, l
-	ld hl, vTiles2 tile $5c
-	lb bc, BANK(TypeDarkIconGFX), 4
-	call Request2bpp
-
-	call SetPalettes
-	hlcoord 5, 14
-	push hl
-	ld [hl], $4c
-	inc hl
-	ld [hl], $4d
-	inc hl
-	ld [hl], $4e
-	inc hl
-	ld [hl], $4f
-	inc hl
-	ld a, [wBaseType1]
-	ld b, a
-	ld a, [wBaseType2]
-	pop hl
-	cp b
-	ret z
-	
-	ld bc, 20 ; use this if you want to mimic the vanilla version:
-	; type tile stacked on top of each other
-	; ld bc, 4
-	add hl, bc
-	ld [hl], $5c
-	inc hl
-	ld [hl], $5d
-	inc hl
-	ld [hl], $5e
-	inc hl
-	ld [hl], $5f
-	ret
 
 LoadGreenPage:
 	ld de, .Item
@@ -873,7 +820,7 @@ LoadBluePage:
 	ld de, wTempMonID
 	call PrintNum
 	ld hl, .OTNamePointers
-	call GetNicknamenamePointer
+	call GetNicknamePointer
 	call CopyNickname
 	farcall CorrectNickErrors
 	hlcoord 2, 13
@@ -884,11 +831,11 @@ LoadBluePage:
 	cp $7f
 	jr z, .done
 	and CAUGHT_GENDER_MASK
-	ld a, $32 ; "♂"
+	ld a, "♂"
 	jr z, .got_gender
-	ld a, $33 ; "♀"
+	ld a, "♀"
 .got_gender
-	hlcoord 1, 13
+	hlcoord 9, 13
 	ld [hl], a
 .done
 	ret
@@ -904,94 +851,6 @@ IDNoString:
 
 OTString:
 	db "OT/@"
-
-LoadOrangePage:
-	call .placeCaughtLocation
-	ld de, MetAtMapString
-	hlcoord 1, 9
-	call PlaceString
-	call .placeCaughtLevel
-	ret
-
-.placeCaughtLocation
-	ld a, [wTempMonCaughtLocation]
-	and CAUGHT_LOCATION_MASK
-	jr z, .unknown_location
-	cp LANDMARK_EVENT
-	jr z, .unknown_location
-	cp LANDMARK_GIFT
-	jr z, .unknown_location
-	ld e, a
-	farcall GetLandmarkName
-	ld de, wStringBuffer1
-	hlcoord 2, 10
-	call PlaceString
-	ld a, [wTempMonCaughtTime]
-	and CAUGHT_TIME_MASK
-	ret z ; no time
-	rlca
-	rlca
-	dec a
-	ld hl, .times
-	call GetNthString
-	ld d, h
-	ld e, l
-	call CopyName1
-	ld de, wStringBuffer2
-	hlcoord 2, 11
-	call PlaceString
-	ret
-
-.unknown_location:
-	ld de, MetUnknownMapString
-	hlcoord 2, 10
-	call PlaceString
-	ret
-
-.times
-	db "MORN@"
-	db "DAY@"
-	db "NITE@"
-
-.placeCaughtLevel
-	; caught level
-	; Limited to between 1 and 63 since it's a 6-bit quantity.
-	ld a, [wTempMonCaughtLevel]
-	and CAUGHT_LEVEL_MASK
-	jr z, .unknown_level
-	cp CAUGHT_EGG_LEVEL ; egg marker value
-	jr nz, .print
-	ld a, EGG_LEVEL ; egg hatch level
-
-.print
-	ld [wTextDecimalByte], a
-	hlcoord 3, 13
-	ld de, wTextDecimalByte
-	lb bc, PRINTNUM_LEFTALIGN | 1, 3
-	call PrintNum
-	ld de, MetAtLevelString
-	hlcoord 1, 12
-	call PlaceString
-	hlcoord 2, 13
-	ld [hl], "<LV>"
-	ret
-
-.unknown_level
-	ld de, MetUnknownLevelString
-	hlcoord 2, 12
-	call PlaceString
-	ret
-
-MetAtMapString:
-	db "MET AT:@"
-
-MetUnknownMapString:
-	db "UNKNOWN@"
-	
-MetAtLevelString:
-	db "MET LEVEL:@"    
-MetUnknownLevelString:
-	db "???@"
 
 StatsScreen_PlaceFrontpic:
 	ld hl, wTempMonDVs
@@ -1276,30 +1135,25 @@ StatsScreen_AnimateEgg:
 	ret
 
 StatsScreen_LoadPageIndicators:
-	hlcoord 11, 5
-	ld a, $42 ; " " " "
-	call .load_square
 	hlcoord 13, 5
-	ld a, $36 ; first of 4 small square tiles
+	ld a, $42 ; first of 4 small square tiles
 	call .load_square
 	hlcoord 15, 5
-	ld a, $42 ; " " " "
+	ld a, $36 ; " " " "
 	call .load_square
 	hlcoord 17, 5
-	ld a, $36 ; " " " "
+	ld a, $42 ; " " " "
 	call .load_square
 	ld a, c
 	cp PINK_PAGE
-	hlcoord 11, 5
+	hlcoord 13, 5
 	jr z, .load_highlighted_square_alt
 	cp GREEN_PAGE
-	hlcoord 13, 5
-	jr z, .load_highlighted_square
-	cp BLUE_PAGE
 	hlcoord 15, 5
-	jr z, .load_highlighted_square_alt
-	; must be ORANGE_PAGE
+	jr z, .load_highlighted_square
+	; can assume cp BLUE_PAGE will be true, no other choices
 	hlcoord 17, 5
+	jr .load_highlighted_square_alt
 .load_highlighted_square
 	ld a, $3a ; first of 4 large square tiles
 .load_square
@@ -1316,7 +1170,7 @@ StatsScreen_LoadPageIndicators:
 	pop bc
 	ret
 .load_highlighted_square_alt
-	ld a, $46 ; first of 4 large square tiles
+	ld a, $46 ; first of 4 large square tiles, alternate Gray pixels for use of 3rd color slot
 	jr .load_square
 
 CopyNickname:
@@ -1341,7 +1195,7 @@ CopyNickname:
 	pop de
 	ret
 
-GetNicknamenamePointer:
+GetNicknamePointer:
 	ld a, [wMonType]
 	add a
 	ld c, a
@@ -1372,4 +1226,60 @@ CheckFaintedFrzSlp:
 
 .fainted_frz_slp
 	scf
+	ret
+
+PrintMonTypeTiles:
+	call GetBaseData
+	ld a, [wBaseType1]
+	ld c, a ; farcall will clobber a for the bank
+	farcall GetMonTypeIndex
+	ld a, c
+	ld hl, TypeLightIconGFX ; from gfx\stats\types_light.png
+	ld bc, 4 * LEN_2BPP_TILE ; Type GFX is 4 tiles wide
+	call AddNTimes
+	ld d, h
+	ld e, l
+	ld hl, vTiles2 tile $4c
+	lb bc, BANK(TypeLightIconGFX), 4 ; Bank in 'c', Number of Tiles in 'c'
+	call Request2bpp
+
+; placing the Type1 Tiles (from gfx\stats\types_light.png)
+	hlcoord 5, 14
+	ld [hl], $4c
+	inc hl
+	ld [hl], $4d
+	inc hl
+	ld [hl], $4e
+	inc hl
+	ld [hl], $4f
+	inc hl
+	ld a, [wBaseType1]
+	ld b, a
+	ld a, [wBaseType2]
+	cp b
+	ret z; Pokemon only has one Type
+
+	; Load Type2 GFX
+	; 2nd Type
+	ld c, a ; Pokemon's second type
+	farcall GetMonTypeIndex
+	ld a, c
+	ld hl, TypeDarkIconGFX ; from gfx\stats\types_dark.png
+	ld bc, 4 * LEN_2BPP_TILE ; Type GFX is 4 Tiles Wide
+	call AddNTimes ; type index needs to be in 'a'
+	ld d, h
+	ld e, l
+	ld hl, vTiles2 tile $5c
+	lb bc, BANK(TypeDarkIconGFX), 4 ; Bank in 'c', Number of Tiles in 'c'
+	call Request2bpp
+	
+; place Type 2 GFX
+	hlcoord 5, 15
+	ld [hl], $5c
+	inc hl
+	ld [hl], $5d
+	inc hl
+	ld [hl], $5e
+	inc hl
+	ld [hl], $5f
 	ret

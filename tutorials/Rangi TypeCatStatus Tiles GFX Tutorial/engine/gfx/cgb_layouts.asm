@@ -110,8 +110,8 @@ _CGB_BattleColors:
 	pop hl
 	call LoadPalette_White_Col1_Col2_Black ; PAL_BATTLE_OB_PLAYER
 
-	call LoadPlayerStatusIconPalette
-	call LoadEnemyStatusIconPalette
+	call LoadPlayerBattleCGBLayoutStatusIconPalette
+	call LoadEnemyBattleCGBLayoutStatusIconPalette
 
 	ld a, SCGB_BATTLE_COLORS
 	ld [wDefaultSGBLayout], a
@@ -147,55 +147,43 @@ _CGB_FinishBattleScreenLayout:
 	ld a, PAL_BATTLE_BG_TEXT
 	call ByteFill
 
-; status icons
-	; enemy
-	hlcoord 2, 1, wAttrmap
-	lb bc, 1, 2 ; box 1 tile high, 2 tiles wide
-	ld a, $6 ; palette 6
-	call FillBoxCGB
-	; player's
-	hlcoord 10, 8, wAttrmap
-	lb bc, 1, 2 ; box 1 tile high, 2 tiles wide
-	ld a, $6 ; pal 6
-	call FillBoxCGB
-
 ; flip reused tiles
 ; HUD vertical bar thingy
 	hlcoord 18, 10, wAttrmap
-	ld bc, 1 ; 1 tile
-	ld a, PAL_BATTLE_BG_PLAYER_HP ; HP bar palette
+	ld bc, 1
+	ld a, PAL_BATTLE_BG_PLAYER_HP
 	set 5, a ; flips tiles on x axis
 	call ByteFill
 
-; player exp bar
+; player exp bar, flip the tiles
 	hlcoord 10, 11, wAttrmap
-	lb bc, 1, 8 ; box 1 tile high, 8 tiles wide
-	ld a, PAL_BATTLE_BG_EXP ; EXP palette 
+	lb bc, 1, 8
+	ld a, PAL_BATTLE_BG_EXP
 	set 5, a ; flips tiles on x axis
 	call FillBoxCGB
 
-; Colored Gender Icons
-; enemy gender at 9, 1
-; player mon gender at 17, 8
-	hlcoord 9, 1, wAttrmap
-	ld bc, 1 ; number of byes for bytefill to apply
-	ld a, $4 ; pal 4
-	call ByteFill
-	hlcoord 17, 8, wAttrmap
-	ld bc, 1 ; number of byes for bytefill to apply
-	ld a, $4 ; pal 4
-	call ByteFill
+; status icons
+	; enemy
+	hlcoord 2, 1, wAttrmap
+	lb bc, 1, 2
+	ld a, $6
+	call FillBoxCGB
+	; player's
+	hlcoord 10, 8, wAttrmap
+	lb bc, 1, 2
+	ld a, $6
+	call FillBoxCGB
 
 ; check if we're in the MoveInfoBox
 	hlcoord 0, 12
 	ld a, [hl]
-	cp $7d ; check for a border Tile that is only in this spot when the MoveInfoBox is open
-	jr nz, .done ; we are not in MoveInfoBox
+	cp $7d
+	jr nz, .done
 
 	; Move Type and Category pal
 	hlcoord 1, 11, wAttrmap
-	ld bc, 7 ; 7 horizontal bytes for ByteFill
-	ld a, $5 ; pal 5
+	ld bc, 7
+	ld a, $5
 	call ByteFill
 
 .done
@@ -260,25 +248,45 @@ _CGB_StatsScreenHPPals:
 	add hl, hl
 	ld bc, HPBarPals
 	add hl, bc
-	call LoadPalette_White_Col1_Col2_Black ; hp palette
+	call LoadPalette_White_Col1_Col2_Black ; hp palette, palette 0
 	ld a, [wCurPartySpecies]
 	ld bc, wTempMonDVs
 	call GetPlayerOrMonPalettePointer
-	call LoadPalette_White_Col1_Col2_Black ; mon palette
+	call LoadPalette_White_Col1_Col2_Black ; mon palette, palette 1
 	ld hl, ExpBarPalette
-	call LoadPalette_White_Col1_Col2_Black ; exp palette
-	call LoadStatsScreenStatusIconPalette
+	call LoadPalette_White_Col1_Col2_Black ; exp palette, palette 2
+
 	ld hl, StatsScreenPagePals
-	ld de, wBGPals1 palette 3
-	ld bc, 2 palettes ; pink, green, blue, and orange page palettes
+	ld de, wBGPals1 palette 3 ; palettes 3 & 4
+	ld bc, 2 palettes ; pink, green, blue, ( and orange page) palettes
+	; NOTE: Won't hurt anything if you don't have a 4th stats page, just leave it
 	ld a, BANK(wBGPals1)
 	call FarCopyWRAM
 
-; mon gender icon pal, pal 5 is currently unused
-	ld hl, ExpBarPalette
-	ld de, wBGPals1 palette 5
-	call LoadPalette_White_Col1_Col2_Black ; exp palette
-	
+	call LoadStatsScreenStatusIconPalette ; Palette 6
+
+; Load Pokemon's Type Palette(s)
+	call GetBaseData
+	ld a, [wBaseType1]
+	ld c, a ; farcall will clobber a for the bank
+	farcall GetMonTypeIndex
+; load the 1st type pal 
+	; type index is already in c
+	ld de, wBGPals1 palette 7 + 2 ; slot 2 of pal 7, byte 1
+	call LoadMonBaseTypePal	
+
+	ld a, [wBaseType1]
+	ld b, a
+	ld a, [wBaseType2]
+	cp b
+	jr z, .palettes_done
+	ld c, a ; farcall will clobber a for the bank
+	farcall GetMonTypeIndex
+; load the 2nd type pal 
+	; type index is already in c
+	ld de, wBGPals1 palette 7 + 4 ; slot 3 of pal 7, byte 1
+	farcall LoadMonBaseTypePal	
+.palettes_done	
 	call WipeAttrmap
 
 	hlcoord 0, 0, wAttrmap
@@ -291,55 +299,41 @@ _CGB_StatsScreenHPPals:
 	ld a, $2 ; exp palette
 	call ByteFill
 
-	hlcoord 11, 5, wAttrmap
-	lb bc, 2, 2
-	ld a, $3 ; pink page palette
+; page indicator boxes
+	hlcoord 13, 5, wAttrmap ; If 4th Stats Page implemented use this instead -> hlcoord 11, 5, wAttrmap
+	lb bc, 2, 4 ; 2 Tiles in HEIGHT, 4 Tiles in WIDTH
+	ld a, $3 ; pink & green page palette
 	call FillBoxCGB
 
-	hlcoord 13, 5, wAttrmap
-	lb bc, 2, 2
-	ld a, $3 ; green page palette
-	call FillBoxCGB
-
-	hlcoord 15, 5, wAttrmap
-	lb bc, 2, 2
+	hlcoord 17, 5, wAttrmap ; If 4th Stats Page implemented use this instead -> hlcoord 15, 5, wAttrmap
+	lb bc, 2, 2 ; 2 Tiles in HEIGHT, 2 Tiles in WIDTH 
+	; If 4th Stats Page implemented use this instead -> lb bc, 2, 4 ; 2 Tiles in HEIGHT, 4 Tiles in WIDTH
 	ld a, $4 ; blue & orange box palette
 	call FillBoxCGB
 
-	hlcoord 17, 5, wAttrmap
-	lb bc, 2, 2
-	ld a, $4 ; blue & orange box palette
-	call FillBoxCGB
-
-	; mon status
+; mon status
 	hlcoord 7, 12, wAttrmap
-	lb bc, 1, 2
+	lb bc, 1, 2 ; 1 Tile in HEIGHT, 2 Tiles in WIDTH 
 	ld a, $6 ; mon base type light/dark pals
 	call FillBoxCGB
 
-	; heart and player gender (if any)
-	hlcoord 0, 12, wAttrmap
-	lb bc, 6, 6
-	ld a, $2 ; exp pal
-	call FillBoxCGB
-
-	; mon gender (if any)
-	hlcoord 18, 0, wAttrmap
-	ld bc, 1
-	ld a, $5 ; pokemon stats page gender pal, needs white bkgrnd
-	; ld a, $7 ; type(s) and gender
-	call ByteFill
-	
-	; mon type(s) 
+; mon type(s) 
 	hlcoord 5, 14, wAttrmap
-	lb bc, 2, 4
+	lb bc, 2, 4 ; 2 Tiles in HEIGHT, 4 Tiles in WIDTH 
 	ld a, $7 ; mon base type light/dark pals
 	call FillBoxCGB
-	; alt ; below species/nickname
-	; hlcoord 10, 4, wAttrmap
-	; ld bc, 9
-	; ld a, $7 ; mon base type light/dark pals
-	; call ByteFill
+
+; Pokerus status Tiles
+	hlcoord 6, 13, wAttrmap
+	ld bc, 3 ; 1 Tile in HEIGHT, 3 Tiles in WIDTH 
+	ld a, $2 ; pokerus and EXP pal
+	call ByteFill
+
+; immune to Pokerus status mark
+	hlcoord 19, 1, wAttrmap
+	ld bc, 1 ; 1 Tile in HEIGHT, 1 Tile in WIDTH 
+	ld a, $4 ; orange
+	call ByteFill
 
 	call ApplyAttrmap
 	call ApplyPals
@@ -354,22 +348,23 @@ StatsScreenPals:
 INCLUDE "gfx/stats/stats.pal"
 
 _CGB_Pokedex:
-	ld de, wBGPals1 ; base address of pal 0
+	ld de, wBGPals1
 	ld a, PREDEFPAL_POKEDEX
 	call GetPredefPal
-	call LoadHLPaletteIntoDE ; dex interface palette, pal 0, auto inc's de to next pal
+	call LoadHLPaletteIntoDE ; dex interface palette
 	ld a, [wCurPartySpecies]
 	cp $ff
 	jr nz, .is_pokemon
 	ld hl, PokedexQuestionMarkPalette
-	call LoadHLPaletteIntoDE ; green question mark palette, pal 1 , auto inc's de to next pal
+	call LoadHLPaletteIntoDE ; green question mark palette
 	jr .got_palette
 
 .is_pokemon
 	call GetMonPalettePointer
-	call LoadPalette_White_Col1_Col2_Black ; mon palette, pal 1, auto inc's de to next pal
-; black background
-	ld de, wBGPals1 palette 7	
+	call LoadPalette_White_Col1_Col2_Black ; mon palette
+
+; black background for Pal 7
+	ld de, wBGPals1 palette 7 ; First color slot of Pal 7	
 	call LoadSingleBlackPal ; loads black into slot 1 of pal 7, since it is normally white
 							; but pokedex has black background
 ; mon type 1	
@@ -393,16 +388,16 @@ _CGB_Pokedex:
 	farcall LoadMonBaseTypePal ; loads type color into slot 3 of pal 7
 
 .got_palette
-	; pokemon sprite or question mark if unseen
 	call WipeAttrmap
 	hlcoord 1, 1, wAttrmap
-	lb bc, 7, 7 ; box 7 tiles high, 7 tiles wide
-	ld a, $1 ; pal 1, pokemon's palette or green question mark palette
+	lb bc, 7, 7
+	ld a, $1 ; green question mark palette
 	call FillBoxCGB
 
-	; mon types
+	; Both mon types
+	; if no 2nd Type, those 4 Squares will appear normally as blank Black Tiles
 	hlcoord 9, 1, wAttrmap
-	lb bc, 1, 8 ; box 1 tile high, 8 tiles wide
+	lb bc, 1, 8 ; box 1 tile in HEIGHT, 8 tiles in WIDTH
 	ld a, $7 ; mon base type pals
 	call FillBoxCGB
 
@@ -656,47 +651,50 @@ _CGB_MapPals:
 	ret
 
 _CGB_PartyMenu:
-
 	ld hl, PalPacket_PartyMenu + 1
 	call CopyFourPalettes
 	call InitPartyMenuBGPal0
 	call InitPartyMenuBGPal7
 	call InitPartyMenuOBPals
-	call InitPartyMenuStatusPals
+
+	call InitPartyMenuStatusPals ; this is the new function added in engine\gfx\color.asm
 
 	ld a, [wPartyCount]
 	and a
 	ret z
-	ld c, a
-	ld b, 0
-	hlcoord 3, 2, wAttrmap
+	ld c, a ; max number of Party Mons
+	ld b, 0 ; how many checked so far
+	hlcoord 3, 2, wAttrmap ; matches the new location specified in PlacePartyMonStatus, in party_menu.asm
 .loop
-	push bc
-	push hl
-	; checking for egg
+	push bc ; party pokemon count (up to six) left, in 'c', number already done in 'b'
+	push hl ; hlcoord 3, 2, wAttrmap, will become adjusted based on which Party member we're working on
+	; checking for egg, skipping to next party mon if so
 	ld a, LOW(wPartySpecies)
 	add b
 	ld e, a
 	ld a, HIGH(wPartySpecies)
 	adc 0
 	ld d, a
-	ld a, [de]
+	; 'de' now contains fully adjusted pointer to current Pokemon species in the Party
+	ld a, [de] ; the species
 	cp EGG
 	jr z, .next
-	; not egg
-	push hl
-	ld a, b
+
+	; not an egg
+	push hl ; which row we are printing on, based on hlcoord 3, 2, wAttrmap
+	ld a, b ; number of Pokemon in Party checked so far
 	ld bc, PARTYMON_STRUCT_LENGTH
-	ld hl, wPartyMon1Status
-	call AddNTimes
+	ld hl, wPartyMon1Status ; more pointer math to calc the pointer to Status Condition of the Party Mon
+	call AddNTimes ; adds 'hl' to 'bc' number of times specified in 'a'
 	ld e, l
 	ld d, h
-	farcall GetStatusConditionIndex
-	ld a, d
+	farcall GetStatusConditionIndex ; expects the pointer in 'de'
+	; returns Status Condition Index in 'd'
+	ld a, d ; status condition index
+	pop hl ; which row we are printing on, based on hlcoord 3, 2, wAttrmap
 	and a
-	pop hl
-	jr z, .next ; Status is "OK"
-	; get the right Pal for the status
+	jr z, .next ; Status is "OK", nothing else to be done for this Mon
+	; get the right Pal for the status condition index, which is in 'a' 
 	ld b, $1 ; PSN status index
 	ld c, $4 ; PSN pal, includes Toxic, they use same pal
 	cp b
@@ -718,23 +716,21 @@ _CGB_PartyMenu:
 	cp b
 	jr z, .done
 	; if we are here, only status left is FNT
-	; ld b, $6 ; FNT Status Index
-	; cp b
-	; jr nz, .next
 	ld c, $6 ; FNT pal
 .done
+	; hlcoord is already done and ready: hlcoord 3, 2, wAttrmap + (Party Mon Row x2)
 	ld a, c ; the Status palette
-	lb bc, 1, 2
+	lb bc, 1, 2 ; box 1 Tile in HEIGHT, 2 Tiles in WIDTH.
 	call FillBoxCGB
-
 .next
-	pop hl
-	ld de, SCREEN_WIDTH * 2
+	pop hl ; 
+	ld de, SCREEN_WIDTH * 2 ; adjusts hl to two rows down
 	add hl, de
-	pop bc
-	inc b
-	dec c
+	pop bc ; party pokemon count (up to six) left, in 'c', number already done in 'b'
+	inc b ; number of Party Mons checked so far, used in various calculations
+	dec c ; number of party mons left to check, stop when 0
 	jr nz, .loop
+	; done with all party pokemon
 
 	call ApplyAttrmap
 	ret
@@ -940,26 +936,50 @@ _CGB_MoveList:
 	call LoadPalette_White_Col1_Col2_Black
 	call WipeAttrmap
 
-	ld hl, Moves + MOVE_TYPE
+; determine Move's Category
+	; in Vanilla, need to check Move Power first to see if Status Move
+	; then determine Phys/Spec based on Type if attacking move
 	ld a, [wCurSpecies]
 	dec a
+	ld hl, Moves + MOVE_POWER
 	ld bc, MOVE_LENGTH
 	call AddNTimes
 	ld a, BANK(Moves)
 	call GetFarByte
-	and CATG_MASK
-	swap a
-	srl a
-	srl a
+	cp 2
+	jr c, .no_power ; means it's a status move
+	jr nz, .nonstatusmove
+.no_power
+	ld a, 2 ; Status Move category index
+	jr .getcategoryGFX
+.nonstatusmove
+	ld a, [wCurSpecies]
 	dec a
-	add a
-	add a
+	ld hl, Moves + MOVE_TYPE
+	ld bc, MOVE_LENGTH
+	call AddNTimes
+	ld a, BANK(Moves)
+	call GetFarByte
+	
+	cp SPECIAL
+	jr c, .phys
+	ld a, 1 ; category index for Special
+	jr .getcategoryGFX
+.phys
+	xor a
+	; fallthrough
+.getcategoryGFX
+	; 'a' contains Category index: 0 for Phys, 1 for Spec, 2 for Status
+
+	add a ; double the index
+	add a ; quadrouple the index
+	; since entries of CategoryIconPals are 4 bytes (2 colors, 2 bytes each) instead of normal 2 bytes (1 color) 
 	ld hl, CategoryIconPals
 	ld c, a
 	ld b, 0
 	add hl, bc
 	ld de, wBGPals1 palette 2 + 2 ; slot 2 of pal 2
-	ld c, 4
+	ld c, 4 ; 2 colors (4 bytes)
 	call LoadCPaletteBytesFromHLIntoDE
 
 	ld hl, Moves + MOVE_TYPE
@@ -969,36 +989,31 @@ _CGB_MoveList:
 	call AddNTimes
 	ld a, BANK(Moves)
 	call GetFarByte
-	and TYPE_MASK
 	ld c, a ; farcall will clobber a for the bank
 	farcall GetMonTypeIndex
 	ld a, c
 	ld hl, TypeIconPals
-	add a
+	add a ; double the index, entries of TypeIconPals are 2 bytes (1 color). Same as a list of pointers
 	ld c, a
 	ld b, 0
 	add hl, bc
-	ld de, wBGPals1 palette 2 + 6
-	ld c, 2
+	ld de, wBGPals1 palette 2 + 6 ; slot 4 of palette 2
+	ld c, 2 ; 1 color (2 bytes)
 	call LoadCPaletteBytesFromHLIntoDE
+
 ; Type and Category tiles
-	
 	hlcoord 2, 13, wAttrmap
-	ld bc, 8
-	ld a, $2
+	ld bc, 8 ; area 1 Tile in HEIGHT, 8 Tiles in WIDTH
+	ld a, $2 ; Palette 2
 	call ByteFill
 	
 ; fix left menu arrow, since we dont have left facing arrow
 	hlcoord 16, 0, wAttrmap
-	ld bc, 1
-	xor a ; pal 0
+	ld bc, 1 ; 1x1 Square
+	xor a ; pal 0, default palette
 	set 5, a ; flip on x axis
 	call ByteFill
 
-	hlcoord 11, 1, wAttrmap
-	lb bc, 2, 9 ; box 2 tiles high, 9 tiles wide
-	ld a, $1
-	call FillBoxCGB
 	call ApplyAttrmap
 	call ApplyPals
 	ld a, TRUE

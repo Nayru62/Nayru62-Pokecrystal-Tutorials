@@ -80,7 +80,6 @@ PredefPointers::
 	add_predef Unused_HOF_AnimateAlignedFrontpic
 	add_predef HOF_AnimateFrontpic
 	add_predef GetStatusConditionIndex
-	add_predef Player_PlaceNonFaintStatus
-	add_predef Enemy_PlaceNonFaintStatus
-	add_predef GetMonTypeIndex
+	add_predef Player_LoadNonFaintStatus
+	add_predef Enemy_LoadNonFaintStatus
 	dbw -1, DummyEndPredef ; pointless

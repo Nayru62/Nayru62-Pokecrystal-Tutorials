@@ -228,16 +228,27 @@ GetDexEntryPointer:
 	ld e, a
 	add hl, de
 	add hl, de
-	add hl, de
-	; b = bank
-	ld a, [hli]
-	ld b, a
-	; de = address
-	ld a, [hli]
-	ld e, a
+	ld e, [hl]
+	inc hl
 	ld d, [hl]
+	push de
+	rlca
+	rlca
+	maskbits NUM_DEX_ENTRY_BANKS
+	ld hl, .PokedexEntryBanks
+	ld d, 0
+	ld e, a
+	add hl, de
+	ld b, [hl]
+	pop de
 	pop hl
 	ret
+
+.PokedexEntryBanks:
+	db BANK("Pokedex Entries 001-064")
+	db BANK("Pokedex Entries 065-128")
+	db BANK("Pokedex Entries 129-192")
+	db BANK("Pokedex Entries 193-251")
 
 GetDexEntryPagePointer:
 	call GetDexEntryPointer
@@ -280,34 +291,33 @@ Dex_PrintMonTypeTiles:
 	call GetBaseData
 	ld a, [wBaseType1]
 	ld c, a ; farcall will clobber a for the bank
-	farcall GetMonTypeIndex
+	farcall GetMonTypeIndex ; returns adjusted Type Index in 'c'
 	ld a, c
 ; load the tiles
-	ld hl, TypeLightIconGFX
-	ld bc, 4 * LEN_2BPP_TILE
-	call AddNTimes
+	ld hl, TypeLightIconGFX ; gfx\stats\types_light.png
+	ld bc, 4 * LEN_2BPP_TILE ; Type GFX are 4 Tiles wide
+	call AddNTimes ; increments the TypeLightIconGFX pointer to the right address of the needed Type Tiles
 	ld d, h
 	ld e, l
-	ld hl, vTiles2 tile $70
-	lb bc, BANK(TypeLightIconGFX), 4
+	ld hl, vTiles2 tile $70 ; destination address of the Tile, in this case Tiles $70-$73
+	lb bc, BANK(TypeLightIconGFX), 4 ; Bank in 'b', Number of Tiles being loaded in 'c'
 	call Request2bpp
 ; 2nd Type
 	ld a, [wBaseType2]
 	ld c, a ; farcall will clobber a for the bank
-	farcall GetMonTypeIndex
+	farcall GetMonTypeIndex ; returns adjusted Type Index in 'c'
 	ld a, c
 ; load type 2 tiles
-	ld hl, TypeDarkIconGFX
-	ld bc, 4 * LEN_2BPP_TILE
-	call AddNTimes
+	ld hl, TypeDarkIconGFX ; gfx\stats\types_dark.png
+	ld bc, 4 * LEN_2BPP_TILE ; Type GFX are 4 Tiles wide
+	call AddNTimes ; increments the TypeDarkIconGFX pointer to the right address of the needed Type Tiles
 	ld d, h
 	ld e, l
-	ld hl, vTiles2 tile $74
-	lb bc, BANK(TypeDarkIconGFX), 4
+	ld hl, vTiles2 tile $74 ; destination address of the Tile, in this case Tiles $74-$77
+	lb bc, BANK(TypeDarkIconGFX), 4 ; Bank in 'b', Number of Tiles being loaded in 'c'
 	call Request2bpp
 
 	hlcoord 9, 1
-	; push hl
 	ld [hl], $70
 	inc hl
 	ld [hl], $71
@@ -320,7 +330,7 @@ Dex_PrintMonTypeTiles:
 	ld b, a
 	ld a, [wBaseType2]
 	cp b
-	ret z ; we dont have a 2nd type
+	ret z ; pokemon doesnt have a 2nd type
 	ld [hl], $74
 	inc hl
 	ld [hl], $75

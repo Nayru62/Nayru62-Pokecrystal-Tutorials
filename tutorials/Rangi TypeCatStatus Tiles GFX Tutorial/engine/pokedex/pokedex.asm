@@ -330,12 +330,10 @@ Pokedex_InitDexEntryScreen:
 	xor a
 	ldh [hBGMapMode], a
 	call ClearSprites
-	; we moved this Pokedex_GetSGBLayout call here because WaitBGMap causes visual artifacts
 	call Pokedex_GetSelectedMon
 	ld [wCurPartySpecies], a
 	ld a, SCGB_POKEDEX
 	call Pokedex_GetSGBLayout
-
 	call Pokedex_LoadCurrentFootprint
 	call Pokedex_DrawDexEntryScreenBG
 	call Pokedex_InitArrowCursor
@@ -346,7 +344,6 @@ Pokedex_InitDexEntryScreen:
 	call WaitBGMap
 	ld a, $a7
 	ldh [hWX], a
-
 	ld a, [wCurPartySpecies]
 	call PlayMonCry
 	call Pokedex_IncrementDexPointer
@@ -468,8 +465,13 @@ DexEntryScreen_MenuActionJumptable:
 	ret
 
 .Cry:
-	ld a, [wCurPartySpecies]
-	call PlayMonCry
+; BUG: Playing Entei's Pokédex cry can distort Raikou's and Suicune's (see docs/bugs_and_glitches.md)
+	call Pokedex_GetSelectedMon
+	ld a, [wTempSpecies]
+	call GetCryIndex
+	ld e, c
+	ld d, b
+	call PlayCry
 	ret
 
 .Print:
@@ -2391,18 +2393,31 @@ Pokedex_LoadAnyFootprint:
 	dec a
 	and %111
 	swap a ; * $10
-	add a, a
 	ld l, a
 	ld h, 0
 	add hl, de
 	ld de, Footprints
 	add hl, de
 
+	push hl
 	ld e, l
 	ld d, h
 	ld hl, vTiles2 tile $62
-	lb bc, BANK(Footprints), 4
+	lb bc, BANK(Footprints), 2
 	call Request1bpp
+	pop hl
+
+	; Whoever was editing footprints forgot to fix their
+	; tile editor. Now each bottom half is 8 tiles off.
+	ld de, 8 tiles
+	add hl, de
+
+	ld e, l
+	ld d, h
+	ld hl, vTiles2 tile $64
+	lb bc, BANK(Footprints), 2
+	call Request1bpp
+
 	ret
 
 Pokedex_LoadGFX:

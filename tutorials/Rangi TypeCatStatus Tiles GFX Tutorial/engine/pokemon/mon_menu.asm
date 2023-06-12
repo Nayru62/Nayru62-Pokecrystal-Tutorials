@@ -1179,8 +1179,19 @@ PrepareToPlaceMoveData:
 PlaceMoveData:
 	xor a
 	ldh [hBGMapMode], a
+	
+	hlcoord 0, 10
+	ld de, String_MoveType_Top
+	call PlaceString
+	hlcoord 0, 11
+	ld de, String_MoveType_Bottom
+	call PlaceString
+; Place Move "Atk"/BP String
+	hlcoord 2, 12
+	ld de, String_MoveAtk ; string for "BP"
+	call PlaceString
 
-; Place Move Cateogry
+; Place Move Cateogry	
 	ld a, [wCurSpecies]
 	dec a
 	ld hl, Moves + MOVE_TYPE
@@ -1188,14 +1199,37 @@ PlaceMoveData:
 	call AddNTimes
 	ld a, BANK(Moves)
 	call GetFarByte
-	and CATG_MASK
-	swap a
-	srl a
-	srl a
+	push af ; raw Move Type+category Byte
+
+; determine Move's Category
+	; in Vanilla, need to check Move Power first to see if Status Move
+	; then determine Phys/Spec based on Type if attacking move
+	ld a, [wCurSpecies]
 	dec a
-	ld b, a
-	push bc
-	ld hl, CategoryIconGFX
+	ld hl, Moves + MOVE_POWER
+	ld bc, MOVE_LENGTH
+	call AddNTimes
+	ld a, BANK(Moves)
+	call GetFarByte
+	cp 2
+	jr c, .statusmove ; means it's a status move
+	jr nz, .nonstatusmove
+.statusmove
+	ld a, 2 ; Status Move category index
+	jr .getcategoryGFX
+.nonstatusmove
+	pop af ; raw Move Type+category Byte
+	push af ; raw Move Type+category Byte
+	cp SPECIAL
+	jr c, .phys
+	ld a, 1 ; category index for Special
+	jr .getcategoryGFX
+.phys
+	xor a
+	; fallthrough
+.getcategoryGFX
+	; 'a' contains Category index: 0 for Phys, 1 for Spec, 2 for Status
+	ld hl, CategoryIconGFX ; ptr to Category GFX loaded from PNG(2bpp)
 	ld bc, 2 tiles
 	call AddNTimes
 	ld d, h
@@ -1204,70 +1238,56 @@ PlaceMoveData:
 	lb bc, BANK(CategoryIconGFX), 2
 	call Request2bpp ; Load 2bpp at b:de to occupy c tiles of hl.
 	hlcoord 7, 13
-	ld a, $59
+	ld a, $59 ; category icon tile 1
 	ld [hli], a
-	ld [hl], $5a
+	ld [hl], $5a ; category icon tile 2
 ; Place Move Type
-	ld a, [wCurSpecies]
-	dec a
-	ld hl, Moves + MOVE_TYPE
-	ld bc, MOVE_LENGTH
-	call AddNTimes
-	ld a, BANK(Moves)
-	call GetFarByte
-	and TYPE_MASK
+	pop af ; raw Move Type+category Byte
 	ld c, a
 	farcall GetMonTypeIndex
 	ld a, c
-.type_adjust_done
-	pop bc
-	
-	ld c, a
-	ld de, wBGPals1 palette 0 + 16
-	push af
-	farcall LoadCategoryAndTypePals
-	call SetPalettes
-
-
-	pop af
-	ld hl, TypeIconGFX
-	ld bc, 4 * LEN_1BPP_TILE
-	call AddNTimes
+; Type Index adjust done
+; Load Type GFX Tiles, color will be in Slot 4 of Palette
+	ld hl, TypeIconGFX ; ptr for PNG w/ black Tiles, since this screen is using Slot 4 in the Palette for Type color
+	ld bc, 4 * LEN_1BPP_TILE ; purely Black and White tiles are 1bpp. Type Tiles are 4 Tiles wide
+	call AddNTimes ; increments pointer based on Type Index
 	ld d, h
-	ld e, l
-	ld hl, vTiles2 tile $5b
-	lb bc, BANK(TypeIconGFX), 4
+	ld e, l ; de is the source Pointer
+	ld hl, vTiles2 tile $5b ; $5b is destination Tile for first Type Tile
+	lb bc, BANK(TypeIconGFX), 4 ; Bank in 'b', num of Tiles to load in 'c'
 	call Request1bpp
 	hlcoord 2, 13
-	ld a, $5b
+	ld a, $5b ; first Type Tile
 	ld [hli], a
-	inc a ; $5c
+	inc a ; Tile $5c
 	ld [hli], a
-	inc a ; $5d
+	inc a ; Tile $5d
 	ld [hli], a
-	ld [hl], $5e
+	ld [hl], $5e ; final Type Tile
 
 ; Place Move Accuracy
 	hlcoord 10, 12
-	ld de, String_MoveAcc
+	ld de, String_MoveAcc ; string for "ACC"	
 	call PlaceString
 	hlcoord 18, 12
 	ld [hl], "<%>"
 
-	ld a, [wCurSpecies]
+	; getting the actual Move's accuracy
+	ld a, [wCurSpecies]	
 	dec a
 	ld hl, Moves + MOVE_ACC
 	ld bc, MOVE_LENGTH
 	call AddNTimes
 	ld a, BANK(Moves)
 	call GetFarByte
-	call Adjust_percent
+	call Adjust_percent ; outputs accuracy in decimal instead of hex to print appropiatley
 	hlcoord 15, 12
 	ld [wTextDecimalByte], a
 	ld de, wTextDecimalByte
-	lb bc, 1, 3
+	lb bc, 1, 3 ; number of bytes of num being printed in 'b', max digits in 'c'
 	call PrintNum
 ; Place Move Effect Chance
+; repeat steps but for Move's effect chance
 	ld a, [wCurSpecies]
 	dec a
 	ld hl, Moves + MOVE_CHANCE
@@ -1279,23 +1299,20 @@ PlaceMoveData:
 	cp 2
 	jr c, .no_efct_chance
 
-	call Adjust_percent
+	call Adjust_percent ; outputs chance in decimal instead of hex to print appropiatley
 	ld [wTextDecimalByte], a
 	ld de, wTextDecimalByte
-	lb bc, 1, 3
+	lb bc, 1, 3 ; number of bytes of num being printed in 'b', max digits in 'c'
 	call PrintNum
 
 	hlcoord 10, 13
-	ld de, String_MoveChance
+	ld de, String_MoveChance ; string for "EFCT"
 	call PlaceString
 	hlcoord 18, 13
 	ld [hl], "<%>"
 .no_efct_chance
-; Place Move POWER
-	hlcoord 2, 12
-	ld de, String_MoveAtk
-	call PlaceString
 
+; Print BP Num
 	ld a, [wCurSpecies]
 	dec a
 	ld hl, Moves + MOVE_POWER
@@ -1305,22 +1322,25 @@ PlaceMoveData:
 	call GetFarByte
 	hlcoord 6, 12
 	cp 2
-	jr c, .no_power
+	jr c, .no_power ; means it's a status move
 	ld [wTextDecimalByte], a
 	ld de, wTextDecimalByte
-	lb bc, 1, 3
+	lb bc, 1, 3 ; number of bytes of num being printed in 'b', max digits in 'c'
 	call PrintNum
-;print Move Description
-	jr .description
+; Print Move Description
+	jr .description ; printed BP, don't overwrite with "---", jump to print description
 
 .no_power
-	ld de, String_MoveNoPower
+	ld de, String_MoveNoPower ; string for "---"
 	call PlaceString
 
 .description
 	hlcoord 1, 14
 	predef PrintMoveDescription
-	ld a, $1
+
+	ld b, SCGB_MOVE_LIST
+	call GetSGBLayout ; reload proper palettes for new Move Type and Category, and apply
+	ld a, $1 ; done editing the screen
 	ldh [hBGMapMode], a
 	ret
 
@@ -1336,27 +1356,6 @@ String_MoveChance:
 	db "EFCT/@"
 String_MoveNoPower:
 	db "---@"
-
-Adjust_percent:
-	; hMultiplicand 
-	; hMultiplier. Result in hProduct.
-	ldh [hMultiplicand], a
-	ld a, 100
-	ldh [hMultiplier], a
-	call Multiply
-	; Divide hDividend length b (max 4 bytes) by hDivisor. Result in hQuotient.
-	; All values are big endian.
-	ld b, 2
-	; ldh a, [hProduct]
-	; ldh [hDividend], a
-	ld a, 255
-	ldh [hDivisor], a
-	call Divide
-	ldh a, [hQuotient + 3]
-	cp 100
-	ret z
-	inc a
-	ret
 
 PlaceMoveScreenArrows:
 	call PlaceMoveScreenLeftArrow
@@ -1421,4 +1420,25 @@ PlaceMoveScreenRightArrow:
 .legal
 	hlcoord 18, 0
 	ld [hl], "▶"
+	ret
+
+Adjust_percent:
+	; hMultiplicand 
+	; hMultiplier. Result in hProduct.
+	ldh [hMultiplicand], a
+	ld a, 100
+	ldh [hMultiplier], a
+	call Multiply
+	; Divide hDividend length b (max 4 bytes) by hDivisor. Result in hQuotient.
+	; All values are big endian.
+	ld b, 2
+	; ldh a, [hProduct]
+	; ldh [hDividend], a
+	ld a, 255
+	ldh [hDivisor], a
+	call Divide
+	ldh a, [hQuotient + 3]
+	cp 100
+	ret z
+	inc a
 	ret
